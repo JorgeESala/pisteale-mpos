@@ -5,6 +5,7 @@ import { AuthProvider } from '@/features/auth/AuthProvider'
 import { LoginPage } from '@/features/auth/LoginPage'
 import { ProtectedRoute } from '@/features/auth/ProtectedRoute'
 import { DashboardPage } from '@/features/dashboard/DashboardPage'
+import { ProfilePage } from '@/features/profile/ProfilePage'
 import { queryClient } from '@/lib/queryClient'
 
 export default function App() {
@@ -20,6 +21,16 @@ export default function App() {
                 <ProtectedRoute>
                   <AppShell>
                     <DashboardPage />
+                  </AppShell>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/perfil"
+              element={
+                <ProtectedRoute>
+                  <AppShell>
+                    <ProfilePage />
                   </AppShell>
                 </ProtectedRoute>
               }

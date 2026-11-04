@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { NavLink } from 'react-router-dom'
+import { Link, NavLink } from 'react-router-dom'
 import { useAuth } from '@/features/auth/auth-context'
 
 const navItems = [
@@ -23,14 +23,14 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="min-h-dvh bg-neutral-950 text-neutral-100">
       <header className="sticky top-0 z-10 border-b border-neutral-800 bg-neutral-950/90 backdrop-blur">
         <div className="mx-auto flex w-full max-w-md items-center justify-between gap-3 px-4 py-3 md:max-w-2xl">
-          <div className="min-w-0">
+          <Link to="/perfil" className="min-w-0 transition hover:opacity-80">
             <p className="text-[11px] font-semibold tracking-[0.35em] text-brand-400">PISTEALE</p>
             <p className="truncate text-sm text-neutral-400">
               {profile
                 ? `${profile.full_name} · ${roleLabels[profile.role] ?? profile.role}`
                 : session?.user.email}
             </p>
-          </div>
+          </Link>
           <button
             type="button"
             onClick={() => void signOut()}

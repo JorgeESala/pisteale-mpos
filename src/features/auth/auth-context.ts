@@ -7,6 +7,7 @@ export type AuthContextValue = {
   profile: Profile | null
   loading: boolean
   signOut: () => Promise<void>
+  updateProfileName: (fullName: string) => Promise<Profile>
 }
 
 export const AuthContext = createContext<AuthContextValue | undefined>(undefined)

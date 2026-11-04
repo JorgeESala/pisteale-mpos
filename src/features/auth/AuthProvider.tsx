@@ -68,8 +68,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile(null)
   }
 
+  async function updateProfileName(fullName: string) {
+    const { data, error } = await supabase.rpc('update_my_profile', {
+      p_full_name: fullName,
+    })
+
+    if (error) throw error
+
+    setProfile(data)
+    return data
+  }
+
   return (
-    <AuthContext.Provider value={{ session, profile, loading, signOut }}>
+    <AuthContext.Provider value={{ session, profile, loading, signOut, updateProfileName }}>
       {children}
     </AuthContext.Provider>
   )

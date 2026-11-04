@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select extensions.plan(23);
+select extensions.plan(31);
 
 delete from auth.users
 where id in (
@@ -297,6 +297,123 @@ select extensions.matches(
   '^PED-[0-9]{4}-00002$',
   'second order folio'
 );
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claim.sub',
+  '22222222-2222-2222-2222-222222222222',
+  true
+);
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"22222222-2222-2222-2222-222222222222","role":"authenticated"}',
+  true
+);
+
+select extensions.is(
+  (
+    select (public.update_my_profile('  Operador Nuevo  ')).full_name
+  ),
+  'Operador Nuevo',
+  'operator updates own name and trims spaces'
+);
+
+select extensions.throws_ok(
+  $sql$select public.update_my_profile(' ')$sql$,
+  '22023',
+  'Nombre inválido',
+  'empty name is rejected'
+);
+
+select extensions.throws_ok(
+  $sql$select public.update_my_profile('A')$sql$,
+  '22023',
+  'Nombre inválido',
+  'one character name is rejected'
+);
+
+select extensions.throws_ok(
+  $sql$select public.update_my_profile(repeat('a', 81))$sql$,
+  '22023',
+  'Nombre inválido',
+  'too long name is rejected'
+);
+
+reset role;
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claim.sub',
+  '33333333-3333-3333-3333-333333333333',
+  true
+);
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"33333333-3333-3333-3333-333333333333","role":"authenticated"}',
+  true
+);
+
+select extensions.throws_ok(
+  $sql$select public.update_my_profile('Inactivo Nuevo')$sql$,
+  '42501',
+  'Perfil no encontrado o inactivo',
+  'inactive user cannot update own name'
+);
+
+reset role;
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claim.sub',
+  '22222222-2222-2222-2222-222222222222',
+  true
+);
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"22222222-2222-2222-2222-222222222222","role":"authenticated"}',
+  true
+);
+
+select extensions.throws_ok(
+  $sql$select public.admin_update_profile_name('11111111-1111-1111-1111-111111111111'::uuid, 'Hack')$sql$,
+  '42501',
+  'No autorizado',
+  'operator cannot update another profile name'
+);
+
+reset role;
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claim.sub',
+  '11111111-1111-1111-1111-111111111111',
+  true
+);
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"11111111-1111-1111-1111-111111111111","role":"authenticated"}',
+  true
+);
+
+select extensions.is(
+  (
+    select (public.admin_update_profile_name(
+      '22222222-2222-2222-2222-222222222222'::uuid,
+      'Operador Admin'
+    )).full_name
+  ),
+  'Operador Admin',
+  'admin updates another profile name'
+);
+
+select extensions.throws_ok(
+  $sql$select public.admin_update_profile_name('99999999-9999-9999-9999-999999999999'::uuid, 'Nadie')$sql$,
+  'P0001',
+  'Perfil no encontrado',
+  'admin cannot update a missing profile'
+);
+
+reset role;
 
 select *
 from extensions.finish();

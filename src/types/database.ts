@@ -84,6 +84,14 @@ export type Database = {
         Args: Record<string, never>
         Returns: Json
       }
+      update_my_profile: {
+        Args: { p_full_name: string }
+        Returns: Profile
+      }
+      admin_update_profile_name: {
+        Args: { p_user_id: string; p_full_name: string }
+        Returns: Profile
+      }
     }
     Enums: {
       user_role: UserRole

@@ -1,4 +1,5 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/features/auth/auth-context'
 
@@ -51,9 +52,17 @@ export function DashboardPage() {
       <section>
         <p className="text-sm text-neutral-400">Bienvenido</p>
         <h1 className="mt-1 text-2xl font-semibold tracking-tight">{profile.full_name}</h1>
-        <span className="mt-2 inline-flex rounded-full bg-brand-400/15 px-3 py-1 text-xs font-medium text-brand-300">
-          {profile.role}
-        </span>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <span className="inline-flex rounded-full bg-brand-400/15 px-3 py-1 text-xs font-medium text-brand-300">
+            {profile.role}
+          </span>
+          <Link
+            to="/perfil"
+            className="rounded-xl border border-neutral-700 px-3 py-2 text-sm text-neutral-300 transition hover:border-neutral-500"
+          >
+            Editar nombre
+          </Link>
+        </div>
       </section>
 
       <section className="rounded-2xl border border-neutral-800 bg-neutral-900 p-4">
