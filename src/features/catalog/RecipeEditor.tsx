@@ -6,18 +6,41 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '@/features/auth/auth-context'
 import { formatCurrency } from '@/lib/format'
 import { supabase } from '@/lib/supabase'
-import type { Product } from '@/types/database'
+import type { InventoryGroupCost, Product } from '@/types/database'
 import { recipeFormSchema, type RecipeForm } from './catalog-schemas'
-import { fetchInventoryItems, fetchRecipe, fetchRecipeItems } from './queries'
+import { fetchInventoryGroups, fetchRecipe, fetchRecipeItems } from './queries'
+import { allowedRecipeUnits, recipeQuantityToBase } from './recipe-units'
+
+function groupUnitCost(
+  group: InventoryGroupCost | undefined,
+  tierRule: string,
+  tier: 'normal' | 'premium',
+): number | null {
+  if (!group) return null
+
+  if (!group.is_tiered || tierRule === 'any') {
+    return group.all_avg_cost
+  }
+
+  if (tierRule === 'estandar') {
+    return group.standard_avg_cost
+  }
+
+  if (tierRule === 'premium') {
+    return group.premium_avg_cost
+  }
+
+  return tier === 'premium' ? group.premium_avg_cost : group.standard_avg_cost
+}
 
 export function RecipeEditor({ product }: { product: Product }) {
   const { profile } = useAuth()
   const queryClient = useQueryClient()
   const isAdmin = profile?.role === 'admin'
 
-  const inventoryItemsQuery = useQuery({
-    queryKey: ['inventory_items'],
-    queryFn: fetchInventoryItems,
+  const groupsQuery = useQuery({
+    queryKey: ['inventory_groups'],
+    queryFn: fetchInventoryGroups,
   })
 
   const recipeQuery = useQuery({
@@ -36,6 +59,7 @@ export function RecipeEditor({ product }: { product: Product }) {
     register,
     handleSubmit,
     reset,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<RecipeForm>({
     resolver: zodResolver(recipeFormSchema),
@@ -54,22 +78,30 @@ export function RecipeEditor({ product }: { product: Product }) {
 
   const watchedItems = useWatch({ control, name: 'items' }) ?? []
   const watchedYield = useWatch({ control, name: 'yieldQty' })
-  const inventoryItems = inventoryItemsQuery.data ?? []
+  const groups = groupsQuery.data ?? []
 
   useEffect(() => {
     const recipe = recipeQuery.data
-    if (!recipe) return
+    const groupData = groupsQuery.data
+    if (!recipe || !groupData) return
 
     reset({
       yieldQty: Number(recipe.yield_qty),
       yieldUnit: recipe.yield_unit,
       notes: recipe.notes,
-      items: (recipeItemsQuery.data ?? []).map((item) => ({
-        inventory_item_id: item.inventory_item_id,
-        qty_base: item.qty_base,
-      })),
+      items: (recipeItemsQuery.data ?? []).map((item) => {
+        const group = groupData.find((candidate) => candidate.group_id === item.inventory_group_id)
+        const fallbackUnit = group?.base_unit ?? 'ml'
+
+        return {
+          inventory_group_id: item.inventory_group_id,
+          tier_rule: item.tier_rule,
+          qty: item.input_qty !== null ? Number(item.input_qty) : Number(item.qty_base),
+          unit: item.input_unit ?? fallbackUnit,
+        }
+      }),
     })
-  }, [recipeQuery.data, recipeItemsQuery.data, reset])
+  }, [recipeQuery.data, recipeItemsQuery.data, groupsQuery.data, reset])
 
   const saveMutation = useMutation({
     mutationFn: async (values: RecipeForm) => {
@@ -79,8 +111,10 @@ export function RecipeEditor({ product }: { product: Product }) {
         p_yield_unit: values.yieldUnit,
         p_notes: values.notes ?? '',
         p_items: values.items.map((item) => ({
-          inventory_item_id: item.inventory_item_id,
-          qty_base: item.qty_base,
+          inventory_group_id: item.inventory_group_id,
+          tier_rule: item.tier_rule,
+          qty: item.qty,
+          unit: item.unit,
         })),
       })
 
@@ -100,28 +134,34 @@ export function RecipeEditor({ product }: { product: Product }) {
     await saveMutation.mutateAsync(values)
   }
 
-  const totalBatchCost = watchedItems.reduce((sum, item) => {
-    const inventoryItem = inventoryItems.find(
-      (candidate) => candidate.id === item.inventory_item_id,
-    )
-    return sum + (inventoryItem ? inventoryItem.avg_cost * Number(item.qty_base || 0) : 0)
-  }, 0)
-  const costPerServing = totalBatchCost / (Number(watchedYield) || 1)
-  const costComplete =
-    watchedItems.length > 0 &&
-    watchedItems.every((item) => {
-      const inventoryItem = inventoryItems.find(
-        (candidate) => candidate.id === item.inventory_item_id,
-      )
-      return inventoryItem ? inventoryItem.avg_cost > 0 : false
-    })
+  let normalBatchCost = 0
+  let premiumBatchCost = 0
+  let normalComplete = watchedItems.length > 0
+  let premiumComplete = watchedItems.length > 0
+
+  for (const item of watchedItems) {
+    const group = groups.find((candidate) => candidate.group_id === item.inventory_group_id)
+    const qtyBase = recipeQuantityToBase(Number(item.qty) || 0, item.unit)
+    const normalUnitCost = groupUnitCost(group, item.tier_rule, 'normal')
+    const premiumUnitCost = groupUnitCost(group, item.tier_rule, 'premium')
+
+    if (normalUnitCost === null) normalComplete = false
+    else normalBatchCost += qtyBase * normalUnitCost
+
+    if (premiumUnitCost === null) premiumComplete = false
+    else premiumBatchCost += qtyBase * premiumUnitCost
+  }
+
+  const yieldQty = Number(watchedYield) || 1
+  const normalCostPerServing = normalBatchCost / yieldQty
+  const premiumCostPerServing = premiumBatchCost / yieldQty
   const hasRecipe = (recipeItemsQuery.data?.length ?? 0) > 0 || watchedItems.length > 0
 
   if (!isAdmin) {
     return null
   }
 
-  if (recipeQuery.isLoading || recipeItemsQuery.isLoading) {
+  if (recipeQuery.isLoading || recipeItemsQuery.isLoading || groupsQuery.isLoading) {
     return <p className="text-sm text-neutral-500">Cargando receta…</p>
   }
 
@@ -131,26 +171,30 @@ export function RecipeEditor({ product }: { product: Product }) {
         <div>
           <h2 className="font-semibold">Receta</h2>
           <p className="mt-1 text-sm text-neutral-400">
-            Las cantidades se capturan en la unidad base del insumo: ml, g o pza.
+            Elige el grupo, la regla de tier y la cantidad. Puedes capturar en ml u oz.
           </p>
         </div>
         <span
           className={`shrink-0 rounded-full px-2 py-1 text-[11px] ${
             hasRecipe
-              ? costComplete
+              ? normalComplete && premiumComplete
                 ? 'bg-green-500/15 text-green-300'
                 : 'bg-yellow-500/15 text-yellow-300'
               : 'bg-amber-500/15 text-amber-300'
           }`}
         >
-          {hasRecipe ? (costComplete ? 'Completa' : 'Costo pendiente') : 'Receta pendiente'}
+          {hasRecipe
+            ? normalComplete && premiumComplete
+              ? 'Completa'
+              : 'Costo pendiente'
+            : 'Receta pendiente'}
         </span>
       </div>
 
-      {inventoryItems.length === 0 ? (
+      {groups.length === 0 ? (
         <div className="mt-4 rounded-xl border border-neutral-800 bg-neutral-950 p-3 text-sm text-neutral-400">
-          No hay insumos registrados.{' '}
-          <Link to="/insumos/nuevo" className="text-brand-300 underline">
+          No hay grupos de insumos.{' '}
+          <Link to="/insumos/grupos/nuevo" className="text-brand-300 underline">
             Crea el primero
           </Link>
           .
@@ -194,59 +238,99 @@ export function RecipeEditor({ product }: { product: Product }) {
 
         <div className="space-y-3">
           {fields.map((field, index) => {
-            const selectedItem = inventoryItems.find(
-              (item) => item.id === watchedItems[index]?.inventory_item_id,
+            const selectedGroup = groups.find(
+              (group) => group.group_id === watchedItems[index]?.inventory_group_id,
             )
+            const units = selectedGroup ? allowedRecipeUnits(selectedGroup.base_unit) : ['ml']
+            const qty = Number(watchedItems[index]?.qty) || 0
+            const unit = watchedItems[index]?.unit ?? 'ml'
+            const converted = recipeQuantityToBase(qty, unit)
 
             return (
               <div
                 key={field.id}
-                className="rounded-xl border border-neutral-800 bg-neutral-950 p-2"
+                className="space-y-2 rounded-xl border border-neutral-800 bg-neutral-950 p-2"
               >
-                <div className="grid grid-cols-[1fr_5.5rem_auto] items-start gap-2">
-                  <div>
-                    <select
-                      className="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-2 py-2.5 text-sm text-neutral-100 outline-none focus:border-brand-400"
-                      {...register(`items.${index}.inventory_item_id`)}
-                    >
-                      <option value="">Insumo…</option>
-                      {inventoryItems.map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.name} ({item.base_unit}){item.active ? '' : ' · inactivo'}
-                        </option>
-                      ))}
-                    </select>
-                    <p className="mt-1 text-[11px] text-neutral-500">
-                      {selectedItem ? selectedItem.base_unit : 'Selecciona un insumo'}
-                    </p>
-                  </div>
-
-                  <input
-                    type="number"
-                    min="1"
-                    step="1"
-                    className="rounded-lg border border-neutral-700 bg-neutral-900 px-2 py-2.5 text-sm text-neutral-100 outline-none focus:border-brand-400"
-                    {...register(`items.${index}.qty_base`, { valueAsNumber: true })}
-                  />
+                <div className="flex gap-2">
+                  <select
+                    className="min-w-0 flex-1 rounded-lg border border-neutral-700 bg-neutral-900 px-2 py-2.5 text-sm text-neutral-100 outline-none focus:border-brand-400"
+                    {...register(`items.${index}.inventory_group_id`, {
+                      onChange: (event) => {
+                        const group = groups.find(
+                          (candidate) => candidate.group_id === event.target.value,
+                        )
+                        if (!group) return
+                        setValue(`items.${index}.unit`, allowedRecipeUnits(group.base_unit)[0]!)
+                        setValue(`items.${index}.tier_rule`, group.is_tiered ? 'match' : 'any')
+                      },
+                    })}
+                  >
+                    <option value="">Grupo…</option>
+                    {groups.map((group) => (
+                      <option key={group.group_id} value={group.group_id}>
+                        {group.name} ({group.base_unit}){group.is_tiered ? ' · tiered' : ''}
+                        {group.active ? '' : ' · inactivo'}
+                      </option>
+                    ))}
+                  </select>
 
                   <button
                     type="button"
                     onClick={() => remove(index)}
-                    className="min-h-10 rounded-lg border border-neutral-700 px-2 text-xs text-neutral-400 transition hover:border-red-500/50 hover:text-red-300"
+                    className="min-h-10 shrink-0 rounded-lg border border-neutral-700 px-2 text-xs text-neutral-400 transition hover:border-red-500/50 hover:text-red-300"
                   >
                     Quitar
                   </button>
                 </div>
 
-                {errors.items?.[index]?.inventory_item_id ? (
-                  <p className="mt-1 text-xs text-red-400">
-                    {errors.items[index]?.inventory_item_id?.message}
+                <div className="grid grid-cols-[1fr_5.5rem_4.5rem] gap-2">
+                  {selectedGroup?.is_tiered ? (
+                    <select
+                      className="rounded-lg border border-neutral-700 bg-neutral-900 px-2 py-2.5 text-sm text-neutral-100 outline-none focus:border-brand-400"
+                      {...register(`items.${index}.tier_rule`)}
+                    >
+                      <option value="match">Igual que la bebida</option>
+                      <option value="any">Cualquier tier</option>
+                      <option value="estandar">Estándar</option>
+                      <option value="premium">Premium</option>
+                    </select>
+                  ) : (
+                    <input type="hidden" {...register(`items.${index}.tier_rule`)} />
+                  )}
+
+                  <input
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    className="rounded-lg border border-neutral-700 bg-neutral-900 px-2 py-2.5 text-sm text-neutral-100 outline-none focus:border-brand-400"
+                    {...register(`items.${index}.qty`, { valueAsNumber: true })}
+                  />
+
+                  <select
+                    className="rounded-lg border border-neutral-700 bg-neutral-900 px-2 py-2.5 text-sm text-neutral-100 outline-none focus:border-brand-400"
+                    {...register(`items.${index}.unit`)}
+                  >
+                    {units.map((candidate) => (
+                      <option key={candidate} value={candidate}>
+                        {candidate}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <p className="text-[11px] text-neutral-500">
+                  {selectedGroup
+                    ? `${qty} ${unit} = ${converted} ${selectedGroup.base_unit}`
+                    : 'Selecciona un grupo'}
+                </p>
+
+                {errors.items?.[index]?.inventory_group_id ? (
+                  <p className="text-xs text-red-400">
+                    {errors.items[index]?.inventory_group_id?.message}
                   </p>
                 ) : null}
-                {errors.items?.[index]?.qty_base ? (
-                  <p className="mt-1 text-xs text-red-400">
-                    {errors.items[index]?.qty_base?.message}
-                  </p>
+                {errors.items?.[index]?.qty ? (
+                  <p className="text-xs text-red-400">{errors.items[index]?.qty?.message}</p>
                 ) : null}
               </div>
             )
@@ -258,7 +342,14 @@ export function RecipeEditor({ product }: { product: Product }) {
 
         <button
           type="button"
-          onClick={() => append({ inventory_item_id: '', qty_base: 1 })}
+          onClick={() =>
+            append({
+              inventory_group_id: '',
+              tier_rule: 'any',
+              qty: 1,
+              unit: 'ml',
+            })
+          }
           className="w-full rounded-xl border border-dashed border-neutral-700 px-3 py-2.5 text-sm text-neutral-300 transition hover:border-brand-400"
         >
           Agregar insumo
@@ -282,20 +373,35 @@ export function RecipeEditor({ product }: { product: Product }) {
           ) : (
             <dl className="space-y-1 text-neutral-400">
               <div className="flex justify-between gap-3">
-                <dt>Costo del lote</dt>
-                <dd>{formatCurrency(totalBatchCost)}</dd>
+                <dt>Costo normal por porción</dt>
+                <dd>{normalComplete ? formatCurrency(normalCostPerServing) : '—'}</dd>
               </div>
               <div className="flex justify-between gap-3">
-                <dt>Costo por porción</dt>
-                <dd>{formatCurrency(costPerServing)}</dd>
+                <dt>Margen normal</dt>
+                <dd>
+                  {normalComplete ? formatCurrency(product.price - normalCostPerServing) : '—'}
+                </dd>
               </div>
-              <div className="flex justify-between gap-3">
-                <dt>Margen estimado</dt>
-                <dd>{formatCurrency(product.price - costPerServing)}</dd>
-              </div>
-              {!costComplete ? (
+              {product.premium_price !== null ? (
+                <>
+                  <div className="flex justify-between gap-3">
+                    <dt>Costo premium por porción</dt>
+                    <dd>{premiumComplete ? formatCurrency(premiumCostPerServing) : '—'}</dd>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <dt>Margen premium</dt>
+                    <dd>
+                      {premiumComplete
+                        ? formatCurrency(product.premium_price - premiumCostPerServing)
+                        : '—'}
+                    </dd>
+                  </div>
+                </>
+              ) : null}
+              {!normalComplete || (product.premium_price !== null && !premiumComplete) ? (
                 <p className="pt-1 text-yellow-300">
-                  Hay insumos sin costo. El margen es estimado hasta capturarlos.
+                  Hay grupos sin costo o sin marcas del tier. El margen es estimado hasta
+                  capturarlos.
                 </p>
               ) : null}
             </dl>

@@ -1,7 +1,9 @@
 import { supabase } from '@/lib/supabase'
 import type {
   InventoryCategory,
-  InventoryItem,
+  InventoryGroup,
+  InventoryGroupCost,
+  InventoryItemView,
   Product,
   ProductCategory,
   ProductCost,
@@ -49,17 +51,37 @@ export async function fetchInventoryCategories(): Promise<InventoryCategory[]> {
   return data
 }
 
-export async function fetchInventoryItems(): Promise<InventoryItem[]> {
-  const { data, error } = await supabase.from('inventory_items').select('*').order('name')
+export async function fetchInventoryGroups(): Promise<InventoryGroupCost[]> {
+  const { data, error } = await supabase.from('v_inventory_group_costs').select('*').order('name')
 
   if (error) throw error
 
   return data
 }
 
-export async function fetchInventoryItem(id: string): Promise<InventoryItem | null> {
+export async function fetchInventoryGroup(id: string): Promise<InventoryGroup | null> {
   const { data, error } = await supabase
-    .from('inventory_items')
+    .from('inventory_item_groups')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle()
+
+  if (error) throw error
+
+  return data
+}
+
+export async function fetchInventoryItems(): Promise<InventoryItemView[]> {
+  const { data, error } = await supabase.from('v_inventory_items').select('*').order('name')
+
+  if (error) throw error
+
+  return data
+}
+
+export async function fetchInventoryItem(id: string): Promise<InventoryItemView | null> {
+  const { data, error } = await supabase
+    .from('v_inventory_items')
     .select('*')
     .eq('id', id)
     .maybeSingle()

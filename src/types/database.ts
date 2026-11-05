@@ -4,6 +4,9 @@ export type UserRole = 'admin' | 'operador' | 'consulta'
 export type ProductKind = 'preparado' | 'botella' | 'servicio'
 export type InventoryKind = 'ingrediente' | 'consumible' | 'botella' | 'preparacion'
 export type BaseUnit = 'ml' | 'g' | 'pza'
+export type InventoryTier = 'estandar' | 'premium'
+export type RecipeTierRule = 'any' | 'estandar' | 'premium' | 'match'
+export type RecipeInputUnit = 'ml' | 'oz' | 'g' | 'pza'
 
 export type Profile = {
   id: string
@@ -52,12 +55,40 @@ export type InventoryCategory = {
   updated_at: string
 }
 
-export type InventoryItem = {
+export type InventoryGroup = {
   id: string
   name: string
   category_id: string | null
-  kind: InventoryKind
   base_unit: BaseUnit
+  is_tiered: boolean
+  active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export type InventoryGroupCost = {
+  group_id: string
+  name: string
+  category_id: string | null
+  category_name: string | null
+  base_unit: BaseUnit
+  is_tiered: boolean
+  active: boolean
+  item_count: number
+  all_avg_cost: number | null
+  standard_avg_cost: number | null
+  premium_avg_cost: number | null
+  all_cost_count: number
+  standard_cost_count: number
+  premium_cost_count: number
+}
+
+export type InventoryItem = {
+  id: string
+  name: string
+  group_id: string
+  tier: InventoryTier | null
+  kind: InventoryKind
   purchase_unit: string
   purchase_factor: number
   avg_cost: number
@@ -68,6 +99,14 @@ export type InventoryItem = {
   updated_at: string
 }
 
+export type InventoryItemView = InventoryItem & {
+  group_name: string
+  category_id: string | null
+  category_name: string | null
+  base_unit: BaseUnit
+  is_tiered: boolean
+}
+
 export type Product = {
   id: string
   name: string
@@ -75,6 +114,7 @@ export type Product = {
   category_id: string | null
   kind: ProductKind
   price: number
+  premium_price: number | null
   is_alcoholic: boolean
   serving_size_ml: number
   inventory_item_id: string | null
@@ -105,8 +145,11 @@ export type Recipe = {
 export type RecipeItem = {
   id: string
   recipe_id: string
-  inventory_item_id: string
+  inventory_group_id: string
+  tier_rule: RecipeTierRule
   qty_base: number
+  input_qty: number | null
+  input_unit: RecipeInputUnit | null
   sort_order: number
   created_at: string
 }
@@ -117,12 +160,16 @@ export type ProductCost = {
   category_id: string | null
   category_name: string | null
   price: number
+  premium_price: number | null
   is_alcoholic: boolean
   active: boolean
-  estimated_cost: number | null
-  estimated_margin: number | null
+  normal_cost: number | null
+  normal_margin: number | null
+  premium_cost: number | null
+  premium_margin: number | null
+  normal_cost_complete: boolean
+  premium_cost_complete: boolean
   has_recipe: boolean
-  cost_complete: boolean
 }
 
 export type Database = {
@@ -154,6 +201,12 @@ export type Database = {
       }
       inventory_categories: {
         Row: InventoryCategory
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      inventory_item_groups: {
+        Row: InventoryGroup
         Insert: never
         Update: never
         Relationships: []
@@ -190,6 +243,14 @@ export type Database = {
       }
     }
     Views: {
+      v_inventory_group_costs: {
+        Row: InventoryGroupCost
+        Relationships: []
+      }
+      v_inventory_items: {
+        Row: InventoryItemView
+        Relationships: []
+      }
       v_product_costs: {
         Row: ProductCost
         Relationships: []
@@ -200,6 +261,10 @@ export type Database = {
         Args: Record<string, never>
         Returns: Json
       }
+      product_cost: {
+        Args: { p_product_id: string; p_tier: string }
+        Returns: number | null
+      }
       update_my_profile: {
         Args: { p_full_name: string }
         Returns: Profile
@@ -208,13 +273,24 @@ export type Database = {
         Args: { p_user_id: string; p_full_name: string }
         Returns: Profile
       }
-      upsert_inventory_item: {
+      upsert_inventory_group: {
         Args: {
           p_id: string | null
           p_name: string
           p_category_id: string | null
-          p_kind: InventoryKind
           p_base_unit: BaseUnit
+          p_is_tiered: boolean
+          p_active: boolean
+        }
+        Returns: InventoryGroup
+      }
+      upsert_inventory_item: {
+        Args: {
+          p_id: string | null
+          p_group_id: string
+          p_name: string
+          p_tier: InventoryTier | null
+          p_kind: InventoryKind
           p_purchase_unit: string
           p_purchase_factor: number
           p_avg_cost: number
@@ -232,6 +308,7 @@ export type Database = {
           p_category_id: string | null
           p_kind: ProductKind
           p_price: number
+          p_premium_price: number | null
           p_is_alcoholic: boolean
           p_serving_size_ml: number
           p_inventory_item_id: string | null

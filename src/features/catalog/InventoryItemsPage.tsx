@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '@/features/auth/auth-context'
 import { formatUnitCost } from '@/lib/format'
-import { fetchInventoryCategories, fetchInventoryItems } from './queries'
+import { fetchInventoryItems } from './queries'
 
 export function InventoryItemsPage() {
   const { profile } = useAuth()
@@ -15,19 +15,11 @@ export function InventoryItemsPage() {
     queryFn: fetchInventoryItems,
   })
 
-  const categoriesQuery = useQuery({
-    queryKey: ['inventory_categories'],
-    queryFn: fetchInventoryCategories,
-  })
-
-  const categoryById = new Map(
-    (categoriesQuery.data ?? []).map((category) => [category.id, category.name]),
-  )
   const normalizedSearch = search.trim().toLocaleLowerCase('es-MX')
   const filteredItems =
     itemsQuery.data?.filter((item) => {
-      const category = item.category_id ? (categoryById.get(item.category_id) ?? '') : ''
-      const haystack = `${item.name} ${category}`.toLocaleLowerCase('es-MX')
+      const haystack =
+        `${item.name} ${item.group_name} ${item.category_name ?? ''}`.toLocaleLowerCase('es-MX')
       return haystack.includes(normalizedSearch)
     }) ?? []
 
@@ -45,6 +37,12 @@ export function InventoryItemsPage() {
           >
             Productos
           </Link>
+          <Link
+            to="/insumos/grupos"
+            className="rounded-xl border border-neutral-700 px-3 py-2 text-sm text-neutral-300 transition hover:border-neutral-500"
+          >
+            Grupos
+          </Link>
           {isAdmin ? (
             <Link
               to="/insumos/nuevo"
@@ -58,7 +56,7 @@ export function InventoryItemsPage() {
 
       <input
         type="search"
-        placeholder="Buscar insumo o categoría"
+        placeholder="Buscar marca, grupo o categoría"
         value={search}
         className="w-full rounded-xl border border-neutral-800 bg-neutral-900 px-4 py-3 text-base text-neutral-100 outline-none transition focus:border-brand-400"
         onChange={(event) => setSearch(event.target.value)}
@@ -85,9 +83,7 @@ export function InventoryItemsPage() {
                 <div className="min-w-0">
                   <p className="truncate font-semibold">{item.name}</p>
                   <p className="mt-0.5 text-xs text-neutral-500">
-                    {item.category_id
-                      ? (categoryById.get(item.category_id) ?? 'Sin categoría')
-                      : 'Sin categoría'}
+                    {item.group_name} · {item.category_name ?? 'Sin categoría'}
                   </p>
                 </div>
                 <p className="shrink-0 text-sm font-semibold">
@@ -99,6 +95,17 @@ export function InventoryItemsPage() {
               </div>
 
               <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
+                {item.tier ? (
+                  <span
+                    className={`rounded-full px-2 py-1 ${
+                      item.tier === 'premium'
+                        ? 'bg-brand-400/15 text-brand-300'
+                        : 'bg-neutral-800 text-neutral-400'
+                    }`}
+                  >
+                    {item.tier === 'premium' ? 'Premium' : 'Estándar'}
+                  </span>
+                ) : null}
                 <span className="rounded-full bg-neutral-800 px-2 py-1 text-neutral-400">
                   Compra: {item.purchase_unit} = {item.purchase_factor} {item.base_unit}
                 </span>

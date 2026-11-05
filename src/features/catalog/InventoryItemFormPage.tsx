@@ -1,12 +1,12 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect } from 'react'
-import { useForm } from 'react-hook-form'
+import { useForm, useWatch } from 'react-hook-form'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '@/features/auth/auth-context'
 import { supabase } from '@/lib/supabase'
 import { inventoryItemFormSchema, type InventoryItemForm } from './catalog-schemas'
-import { fetchInventoryCategories, fetchInventoryItem } from './queries'
+import { fetchInventoryGroups, fetchInventoryItem } from './queries'
 
 export function InventoryItemFormPage() {
   const { id } = useParams<{ id: string }>()
@@ -23,23 +23,26 @@ export function InventoryItemFormPage() {
     enabled: Boolean(itemId),
   })
 
-  const categoriesQuery = useQuery({
-    queryKey: ['inventory_categories'],
-    queryFn: fetchInventoryCategories,
+  const groupsQuery = useQuery({
+    queryKey: ['inventory_groups'],
+    queryFn: fetchInventoryGroups,
   })
 
   const {
+    control,
     register,
     handleSubmit,
     reset,
+    getValues,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<InventoryItemForm>({
     resolver: zodResolver(inventoryItemFormSchema),
     defaultValues: {
       name: '',
-      categoryId: '',
+      groupId: '',
+      tier: null,
       kind: 'ingrediente',
-      baseUnit: 'ml',
       purchaseUnit: 'botella',
       purchaseFactor: 750,
       avgCost: 0,
@@ -49,15 +52,30 @@ export function InventoryItemFormPage() {
     },
   })
 
+  const groupId = useWatch({ control, name: 'groupId' })
+  const selectedGroup = groupsQuery.data?.find((group) => group.group_id === groupId)
+
+  useEffect(() => {
+    if (!selectedGroup) return
+
+    if (selectedGroup.is_tiered) {
+      if (!getValues('tier')) {
+        setValue('tier', 'estandar')
+      }
+    } else {
+      setValue('tier', null)
+    }
+  }, [selectedGroup, getValues, setValue])
+
   useEffect(() => {
     const item = itemQuery.data
-    if (!item) return
+    if (!item || !groupsQuery.data) return
 
     reset({
       name: item.name,
-      categoryId: item.category_id ?? '',
+      groupId: item.group_id,
+      tier: item.tier,
       kind: item.kind,
-      baseUnit: item.base_unit,
       purchaseUnit: item.purchase_unit,
       purchaseFactor: item.purchase_factor,
       avgCost: item.avg_cost,
@@ -65,7 +83,7 @@ export function InventoryItemFormPage() {
       trackStock: item.track_stock,
       active: item.active,
     })
-  }, [itemQuery.data, reset])
+  }, [itemQuery.data, groupsQuery.data, reset])
 
   const saveMutation = useMutation({
     mutationFn: async (values: InventoryItemForm) => {
@@ -73,10 +91,10 @@ export function InventoryItemFormPage() {
 
       const { data, error } = await supabase.rpc('upsert_inventory_item', {
         p_id: targetId,
+        p_group_id: values.groupId,
         p_name: values.name,
-        p_category_id: values.categoryId || null,
+        p_tier: values.tier,
         p_kind: values.kind,
-        p_base_unit: values.baseUnit,
         p_purchase_unit: values.purchaseUnit,
         p_purchase_factor: values.purchaseFactor,
         p_avg_cost: values.avgCost,
@@ -92,6 +110,7 @@ export function InventoryItemFormPage() {
     onSuccess: ({ item, created }) => {
       void queryClient.invalidateQueries({ queryKey: ['inventory_items'] })
       void queryClient.invalidateQueries({ queryKey: ['inventory_item', item.id] })
+      void queryClient.invalidateQueries({ queryKey: ['inventory_groups'] })
       void queryClient.invalidateQueries({ queryKey: ['products'] })
 
       if (created) {
@@ -116,7 +135,7 @@ export function InventoryItemFormPage() {
     )
   }
 
-  if (itemQuery.isLoading) {
+  if (itemQuery.isLoading || groupsQuery.isLoading) {
     return <p className="text-sm text-neutral-500">Cargando insumo…</p>
   }
 
@@ -163,11 +182,12 @@ export function InventoryItemFormPage() {
       >
         <div>
           <label htmlFor="name" className="mb-1.5 block text-sm text-neutral-300">
-            Nombre
+            Marca / presentación
           </label>
           <input
             id="name"
             type="text"
+            placeholder="Ej. Bacardí Blanco 750 ml"
             className="w-full rounded-xl border border-neutral-700 bg-neutral-950 px-4 py-3 text-base text-neutral-100 outline-none transition focus:border-brand-400"
             {...register('name')}
           />
@@ -176,28 +196,53 @@ export function InventoryItemFormPage() {
           ) : null}
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label htmlFor="groupId" className="mb-1.5 block text-sm text-neutral-300">
+            Grupo
+          </label>
+          <select
+            id="groupId"
+            className="w-full rounded-xl border border-neutral-700 bg-neutral-950 px-3 py-3 text-base text-neutral-100 outline-none transition focus:border-brand-400"
+            {...register('groupId')}
+          >
+            <option value="">Selecciona un grupo</option>
+            {groupsQuery.data?.map((group) => (
+              <option key={group.group_id} value={group.group_id}>
+                {group.name} ({group.base_unit}){group.is_tiered ? ' · tiered' : ''}
+              </option>
+            ))}
+          </select>
+          {errors.groupId ? (
+            <p className="mt-1.5 text-sm text-red-400">{errors.groupId.message}</p>
+          ) : null}
+          {selectedGroup ? (
+            <p className="mt-1 text-xs text-neutral-500">
+              {selectedGroup.category_name ?? 'Sin categoría'} · unidad base{' '}
+              {selectedGroup.base_unit}
+            </p>
+          ) : null}
+        </div>
+
+        {selectedGroup?.is_tiered ? (
           <div>
-            <label htmlFor="categoryId" className="mb-1.5 block text-sm text-neutral-300">
-              Categoría
+            <label htmlFor="tier" className="mb-1.5 block text-sm text-neutral-300">
+              Tier
             </label>
             <select
-              id="categoryId"
+              id="tier"
               className="w-full rounded-xl border border-neutral-700 bg-neutral-950 px-3 py-3 text-base text-neutral-100 outline-none transition focus:border-brand-400"
-              {...register('categoryId')}
+              {...register('tier')}
             >
-              <option value="">Sin categoría</option>
-              {categoriesQuery.data?.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {category.name}
-                </option>
-              ))}
+              <option value="estandar">Estándar</option>
+              <option value="premium">Premium</option>
             </select>
           </div>
+        ) : null}
 
+        <div className="grid grid-cols-2 gap-3">
           <div>
             <label htmlFor="kind" className="mb-1.5 block text-sm text-neutral-300">
-              Tipo
+              Tipo de insumo
             </label>
             <select
               id="kind"
@@ -208,23 +253,6 @@ export function InventoryItemFormPage() {
               <option value="consumible">Consumible</option>
               <option value="botella">Botella</option>
               <option value="preparacion">Preparación</option>
-            </select>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label htmlFor="baseUnit" className="mb-1.5 block text-sm text-neutral-300">
-              Unidad base
-            </label>
-            <select
-              id="baseUnit"
-              className="w-full rounded-xl border border-neutral-700 bg-neutral-950 px-3 py-3 text-base text-neutral-100 outline-none transition focus:border-brand-400"
-              {...register('baseUnit')}
-            >
-              <option value="ml">ml</option>
-              <option value="g">g</option>
-              <option value="pza">pza</option>
             </select>
           </div>
 
@@ -258,7 +286,7 @@ export function InventoryItemFormPage() {
               className="w-full rounded-xl border border-neutral-700 bg-neutral-950 px-4 py-3 text-base text-neutral-100 outline-none transition focus:border-brand-400"
               {...register('purchaseFactor', { valueAsNumber: true })}
             />
-            <p className="mt-1 text-[11px] text-neutral-500">Ej. botella de 750 ml = 750 ml.</p>
+            <p className="mt-1 text-[11px] text-neutral-500">Ej. botella de 750 ml = 750.</p>
             {errors.purchaseFactor ? (
               <p className="mt-1.5 text-sm text-red-400">{errors.purchaseFactor.message}</p>
             ) : null}

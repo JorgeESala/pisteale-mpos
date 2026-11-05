@@ -1,24 +1,45 @@
 import { z } from 'zod'
 
-export const productFormSchema = z.object({
-  name: z.string().trim().min(2, 'Mínimo 2 caracteres').max(100, 'Máximo 100 caracteres'),
-  description: z.string().max(1000, 'Máximo 1000 caracteres'),
-  categoryId: z.string(),
-  kind: z.enum(['preparado', 'botella', 'servicio']),
-  price: z.number().min(0, 'Precio inválido'),
-  isAlcoholic: z.boolean(),
-  servingSizeMl: z.number().int().positive('Tamaño inválido'),
-  active: z.boolean(),
-  notes: z.string().max(1000, 'Máximo 1000 caracteres'),
-})
+export const productFormSchema = z
+  .object({
+    name: z.string().trim().min(2, 'Mínimo 2 caracteres').max(100, 'Máximo 100 caracteres'),
+    description: z.string().max(1000, 'Máximo 1000 caracteres'),
+    categoryId: z.string(),
+    kind: z.enum(['preparado', 'botella', 'servicio']),
+    price: z.number().min(0, 'Precio inválido'),
+    premiumPrice: z.number().nullable(),
+    isAlcoholic: z.boolean(),
+    servingSizeMl: z.number().int().positive('Tamaño inválido'),
+    active: z.boolean(),
+    notes: z.string().max(1000, 'Máximo 1000 caracteres'),
+  })
+  .superRefine((data, ctx) => {
+    if (data.isAlcoholic && (data.premiumPrice === null || data.premiumPrice < 0)) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Precio premium requerido',
+        path: ['premiumPrice'],
+      })
+    }
+  })
 
 export type ProductForm = z.infer<typeof productFormSchema>
 
-export const inventoryItemFormSchema = z.object({
+export const inventoryGroupFormSchema = z.object({
   name: z.string().trim().min(2, 'Mínimo 2 caracteres').max(100, 'Máximo 100 caracteres'),
   categoryId: z.string(),
-  kind: z.enum(['ingrediente', 'consumible', 'botella', 'preparacion']),
   baseUnit: z.enum(['ml', 'g', 'pza']),
+  isTiered: z.boolean(),
+  active: z.boolean(),
+})
+
+export type InventoryGroupForm = z.infer<typeof inventoryGroupFormSchema>
+
+export const inventoryItemFormSchema = z.object({
+  name: z.string().trim().min(2, 'Mínimo 2 caracteres').max(100, 'Máximo 100 caracteres'),
+  groupId: z.string().uuid('Selecciona un grupo'),
+  tier: z.enum(['estandar', 'premium']).nullable(),
+  kind: z.enum(['ingrediente', 'consumible', 'botella', 'preparacion']),
   purchaseUnit: z.string().trim().min(1, 'Requerido').max(30, 'Máximo 30 caracteres'),
   purchaseFactor: z.number().positive('Debe ser mayor a 0'),
   avgCost: z.number().min(0, 'Costo inválido'),
@@ -30,8 +51,10 @@ export const inventoryItemFormSchema = z.object({
 export type InventoryItemForm = z.infer<typeof inventoryItemFormSchema>
 
 export const recipeItemSchema = z.object({
-  inventory_item_id: z.string().uuid('Selecciona un insumo'),
-  qty_base: z.number().int().positive('Cantidad inválida'),
+  inventory_group_id: z.string().uuid('Selecciona un grupo'),
+  tier_rule: z.enum(['any', 'estandar', 'premium', 'match']),
+  qty: z.number().positive('Cantidad inválida'),
+  unit: z.enum(['ml', 'oz', 'g', 'pza']),
 })
 
 export const recipeFormSchema = z.object({

@@ -1,34 +1,33 @@
 import { describe, expect, it } from 'vitest'
-import { inventoryItemFormSchema, productFormSchema, recipeFormSchema } from './catalog-schemas'
+import {
+  inventoryGroupFormSchema,
+  inventoryItemFormSchema,
+  productFormSchema,
+  recipeFormSchema,
+} from './catalog-schemas'
+
+const validProduct = {
+  name: 'Mojito',
+  description: '',
+  categoryId: '',
+  kind: 'preparado' as const,
+  price: 120,
+  premiumPrice: 150,
+  isAlcoholic: true,
+  servingSizeMl: 1000,
+  active: true,
+  notes: '',
+}
 
 describe('productFormSchema', () => {
   it('accepts a valid product', () => {
-    const result = productFormSchema.safeParse({
-      name: 'Mojito',
-      description: '',
-      categoryId: '',
-      kind: 'preparado',
-      price: 120,
-      isAlcoholic: true,
-      servingSizeMl: 1000,
-      active: true,
-      notes: '',
-    })
-
-    expect(result.success).toBe(true)
+    expect(productFormSchema.safeParse(validProduct).success).toBe(true)
   })
 
-  it('rejects a short name', () => {
+  it('rejects an alcoholic product without premium price', () => {
     const result = productFormSchema.safeParse({
-      name: 'A',
-      description: '',
-      categoryId: '',
-      kind: 'preparado',
-      price: 120,
-      isAlcoholic: true,
-      servingSizeMl: 1000,
-      active: true,
-      notes: '',
+      ...validProduct,
+      premiumPrice: null,
     })
 
     expect(result.success).toBe(false)
@@ -36,15 +35,34 @@ describe('productFormSchema', () => {
 
   it('rejects a negative price', () => {
     const result = productFormSchema.safeParse({
-      name: 'Mojito',
-      description: '',
-      categoryId: '',
-      kind: 'preparado',
+      ...validProduct,
       price: -1,
-      isAlcoholic: true,
-      servingSizeMl: 1000,
+    })
+
+    expect(result.success).toBe(false)
+  })
+})
+
+describe('inventoryGroupFormSchema', () => {
+  it('accepts a valid group', () => {
+    const result = inventoryGroupFormSchema.safeParse({
+      name: 'Ron blanco',
+      categoryId: '',
+      baseUnit: 'ml',
+      isTiered: true,
       active: true,
-      notes: '',
+    })
+
+    expect(result.success).toBe(true)
+  })
+
+  it('rejects a short name', () => {
+    const result = inventoryGroupFormSchema.safeParse({
+      name: 'R',
+      categoryId: '',
+      baseUnit: 'ml',
+      isTiered: true,
+      active: true,
     })
 
     expect(result.success).toBe(false)
@@ -54,13 +72,13 @@ describe('productFormSchema', () => {
 describe('inventoryItemFormSchema', () => {
   it('accepts a valid inventory item', () => {
     const result = inventoryItemFormSchema.safeParse({
-      name: 'Ron blanco',
-      categoryId: '',
+      name: 'Bacardí Blanco 750',
+      groupId: '11111111-1111-4111-8111-111111111111',
+      tier: 'estandar',
       kind: 'ingrediente',
-      baseUnit: 'ml',
       purchaseUnit: 'botella',
       purchaseFactor: 750,
-      avgCost: 0.1,
+      avgCost: 0.4,
       minStockBase: 0,
       trackStock: true,
       active: true,
@@ -71,13 +89,13 @@ describe('inventoryItemFormSchema', () => {
 
   it('rejects a zero purchase factor', () => {
     const result = inventoryItemFormSchema.safeParse({
-      name: 'Ron blanco',
-      categoryId: '',
+      name: 'Bacardí Blanco 750',
+      groupId: '11111111-1111-4111-8111-111111111111',
+      tier: 'estandar',
       kind: 'ingrediente',
-      baseUnit: 'ml',
       purchaseUnit: 'botella',
       purchaseFactor: 0,
-      avgCost: 0.1,
+      avgCost: 0.4,
       minStockBase: 0,
       trackStock: true,
       active: true,
@@ -88,15 +106,17 @@ describe('inventoryItemFormSchema', () => {
 })
 
 describe('recipeFormSchema', () => {
-  it('accepts a valid recipe', () => {
+  it('accepts a recipe with ounces', () => {
     const result = recipeFormSchema.safeParse({
       yieldQty: 1,
       yieldUnit: 'porcion',
       notes: '',
       items: [
         {
-          inventory_item_id: '11111111-1111-4111-8111-111111111111',
-          qty_base: 100,
+          inventory_group_id: '11111111-1111-4111-8111-111111111111',
+          tier_rule: 'match',
+          qty: 1.5,
+          unit: 'oz',
         },
       ],
     })
@@ -122,8 +142,10 @@ describe('recipeFormSchema', () => {
       notes: '',
       items: [
         {
-          inventory_item_id: '11111111-1111-4111-8111-111111111111',
-          qty_base: 0,
+          inventory_group_id: '11111111-1111-4111-8111-111111111111',
+          tier_rule: 'match',
+          qty: 0,
+          unit: 'oz',
         },
       ],
     })

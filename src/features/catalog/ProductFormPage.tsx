@@ -1,7 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect } from 'react'
-import { useForm } from 'react-hook-form'
+import { useForm, useWatch } from 'react-hook-form'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '@/features/auth/auth-context'
 import { supabase } from '@/lib/supabase'
@@ -30,6 +30,7 @@ export function ProductFormPage() {
   })
 
   const {
+    control,
     register,
     handleSubmit,
     reset,
@@ -42,6 +43,7 @@ export function ProductFormPage() {
       categoryId: '',
       kind: 'preparado',
       price: 120,
+      premiumPrice: 150,
       isAlcoholic: true,
       servingSizeMl: 1000,
       active: true,
@@ -49,9 +51,11 @@ export function ProductFormPage() {
     },
   })
 
+  const isAlcoholic = useWatch({ control, name: 'isAlcoholic' })
+
   useEffect(() => {
     const product = productQuery.data
-    if (!product) return
+    if (!product || !categoriesQuery.data) return
 
     reset({
       name: product.name,
@@ -59,12 +63,13 @@ export function ProductFormPage() {
       categoryId: product.category_id ?? '',
       kind: product.kind,
       price: product.price,
+      premiumPrice: product.premium_price,
       isAlcoholic: product.is_alcoholic,
       servingSizeMl: product.serving_size_ml,
       active: product.active,
       notes: product.notes,
     })
-  }, [productQuery.data, reset])
+  }, [productQuery.data, categoriesQuery.data, reset])
 
   const saveMutation = useMutation({
     mutationFn: async (values: ProductForm) => {
@@ -77,6 +82,7 @@ export function ProductFormPage() {
         p_category_id: values.categoryId || null,
         p_kind: values.kind,
         p_price: values.price,
+        p_premium_price: values.isAlcoholic ? values.premiumPrice : null,
         p_is_alcoholic: values.isAlcoholic,
         p_serving_size_ml: values.servingSizeMl,
         p_inventory_item_id: productQuery.data?.inventory_item_id ?? null,
@@ -212,7 +218,7 @@ export function ProductFormPage() {
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label htmlFor="price" className="mb-1.5 block text-sm text-neutral-300">
-              Precio
+              Precio normal
             </label>
             <input
               id="price"
@@ -244,6 +250,25 @@ export function ProductFormPage() {
             ) : null}
           </div>
         </div>
+
+        {isAlcoholic ? (
+          <div>
+            <label htmlFor="premiumPrice" className="mb-1.5 block text-sm text-neutral-300">
+              Precio premium
+            </label>
+            <input
+              id="premiumPrice"
+              type="number"
+              min="0"
+              step="0.01"
+              className="w-full rounded-xl border border-neutral-700 bg-neutral-950 px-4 py-3 text-base text-neutral-100 outline-none transition focus:border-brand-400"
+              {...register('premiumPrice', { valueAsNumber: true })}
+            />
+            {errors.premiumPrice ? (
+              <p className="mt-1.5 text-sm text-red-400">{errors.premiumPrice.message}</p>
+            ) : null}
+          </div>
+        ) : null}
 
         <div>
           <label htmlFor="description" className="mb-1.5 block text-sm text-neutral-300">

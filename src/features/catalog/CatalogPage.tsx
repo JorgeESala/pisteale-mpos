@@ -78,7 +78,14 @@ export function CatalogPage() {
                     {product.category_name ?? 'Sin categoría'}
                   </p>
                 </div>
-                <p className="shrink-0 text-sm font-semibold">{formatCurrency(product.price)}</p>
+                <div className="shrink-0 text-right text-sm font-semibold">
+                  <p>{formatCurrency(product.price)}</p>
+                  {product.premium_price !== null ? (
+                    <p className="text-xs font-normal text-brand-300">
+                      Premium {formatCurrency(product.premium_price)}
+                    </p>
+                  ) : null}
+                </div>
               </div>
 
               <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
@@ -92,9 +99,16 @@ export function CatalogPage() {
                     Receta pendiente
                   </span>
                 ) : null}
-                {product.has_recipe && !product.cost_complete ? (
+                {product.has_recipe && !product.normal_cost_complete ? (
                   <span className="rounded-full bg-yellow-500/15 px-2 py-1 text-yellow-300">
-                    Costo pendiente
+                    Costo normal pendiente
+                  </span>
+                ) : null}
+                {product.has_recipe &&
+                product.premium_price !== null &&
+                !product.premium_cost_complete ? (
+                  <span className="rounded-full bg-yellow-500/15 px-2 py-1 text-yellow-300">
+                    Costo premium pendiente
                   </span>
                 ) : null}
                 <span className="rounded-full bg-neutral-800 px-2 py-1 text-neutral-400">
@@ -103,16 +117,28 @@ export function CatalogPage() {
               </div>
 
               <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-neutral-400">
-                <span>
-                  Costo:{' '}
-                  {product.estimated_cost === null ? '—' : formatCurrency(product.estimated_cost)}
-                </span>
-                <span>
-                  Margen:{' '}
-                  {product.estimated_margin === null
-                    ? '—'
-                    : formatCurrency(product.estimated_margin)}
-                </span>
+                <div>
+                  <p className="text-neutral-500">Normal</p>
+                  <p>
+                    Costo:{' '}
+                    {product.normal_cost === null ? '—' : formatCurrency(product.normal_cost)}
+                  </p>
+                  <p>
+                    Margen:{' '}
+                    {product.normal_margin === null ? '—' : formatCurrency(product.normal_margin)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-brand-300">Premium</p>
+                  <p>
+                    Costo:{' '}
+                    {product.premium_cost === null ? '—' : formatCurrency(product.premium_cost)}
+                  </p>
+                  <p>
+                    Margen:{' '}
+                    {product.premium_margin === null ? '—' : formatCurrency(product.premium_margin)}
+                  </p>
+                </div>
               </div>
             </Link>
           ))}
