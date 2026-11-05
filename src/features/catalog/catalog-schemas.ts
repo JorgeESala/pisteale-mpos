@@ -65,3 +65,20 @@ export const recipeFormSchema = z.object({
 })
 
 export type RecipeForm = z.infer<typeof recipeFormSchema>
+
+export const defaultConsumablesFormSchema = z.object({
+  iceGroupId: z.string().uuid('Selecciona un grupo'),
+  cupGroupId: z.string().uuid('Selecciona un grupo'),
+  lidGroupId: z.string().uuid('Selecciona un grupo'),
+  strawGroupId: z.string().uuid('Selecciona un grupo'),
+  cupQty: z.number().int().positive('Cantidad inválida'),
+  lidQty: z.number().int().positive('Cantidad inválida'),
+  strawQty: z.number().int().positive('Cantidad inválida'),
+  iceDensity: z.number().positive('Densidad inválida'),
+  iceActive: z.boolean(),
+  cupActive: z.boolean(),
+  lidActive: z.boolean(),
+  strawActive: z.boolean(),
+})
+
+export type DefaultConsumablesForm = z.infer<typeof defaultConsumablesFormSchema>

@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select extensions.plan(48);
+select extensions.plan(50);
 
 delete from auth.users
 where id in (
@@ -138,7 +138,7 @@ select extensions.is(
 
 select extensions.is(
   (select count(*) from public.app_settings),
-  6::bigint,
+  7::bigint,
   'admin sees all settings'
 );
 
@@ -213,7 +213,7 @@ select extensions.is(
 
 select extensions.is(
   (select count(*) from public.app_settings),
-  6::bigint,
+  7::bigint,
   'operator sees settings'
 );
 
@@ -439,6 +439,30 @@ where id in (
 delete from public.inventory_item_groups
 where id = '44444444-4444-4444-4444-444444444444'::uuid;
 
+update public.inventory_items
+set avg_cost = 0.001
+where group_id = (
+  select id from public.inventory_item_groups where name = 'Hielo'
+);
+
+update public.inventory_items
+set avg_cost = 1.0
+where group_id = (
+  select id from public.inventory_item_groups where name = 'Vaso 940 ml'
+);
+
+update public.inventory_items
+set avg_cost = 0.5
+where group_id = (
+  select id from public.inventory_item_groups where name = 'Tapa 940 ml'
+);
+
+update public.inventory_items
+set avg_cost = 0.1
+where group_id = (
+  select id from public.inventory_item_groups where name = 'Popote'
+);
+
 set local role authenticated;
 select set_config(
   'request.jwt.claim.sub',
@@ -587,7 +611,7 @@ select extensions.is(
       120,
       150,
       true,
-      1000,
+      940,
       null,
       true,
       ''
@@ -660,27 +684,54 @@ select extensions.throws_ok(
   'recipe rejects duplicate groups'
 );
 
+select extensions.throws_ok(
+  $sql$select public.upsert_recipe(
+    '77777777-7777-7777-7777-777777777777'::uuid,
+    1,
+    'porcion',
+    '',
+    jsonb_build_array(
+      jsonb_build_object(
+        'inventory_group_id',
+        (select id from public.inventory_item_groups where name = 'Hielo'),
+        'tier_rule', 'any',
+        'qty', 100,
+        'unit', 'g'
+      )
+    )
+  )$sql$,
+  '22023',
+  'Este insumo se agrega automáticamente',
+  'recipe rejects automatic consumables'
+);
+
 select extensions.is(
   (select normal_cost from public.v_product_costs where product_id = '77777777-7777-7777-7777-777777777777'),
-  4.50::numeric,
+  6.91::numeric,
   'normal product cost is calculated'
 );
 
 select extensions.is(
   (select premium_cost from public.v_product_costs where product_id = '77777777-7777-7777-7777-777777777777'),
-  9.00::numeric,
+  11.41::numeric,
   'premium product cost is calculated'
 );
 
 select extensions.is(
+  (select consumables_cost from public.v_product_costs where product_id = '77777777-7777-7777-7777-777777777777'),
+  2.41::numeric,
+  'consumables cost is included'
+);
+
+select extensions.is(
   (select normal_margin from public.v_product_costs where product_id = '77777777-7777-7777-7777-777777777777'),
-  115.50::numeric,
+  113.09::numeric,
   'normal product margin is calculated'
 );
 
 select extensions.is(
   (select premium_margin from public.v_product_costs where product_id = '77777777-7777-7777-7777-777777777777'),
-  141.00::numeric,
+  138.59::numeric,
   'premium product margin is calculated'
 );
 

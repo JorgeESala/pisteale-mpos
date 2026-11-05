@@ -30,7 +30,7 @@ export function InventoryItemsPage() {
           <p className="text-sm text-neutral-400">Catálogo</p>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight">Insumos</h1>
         </div>
-        <div className="flex shrink-0 gap-2">
+        <div className="flex flex-wrap justify-end gap-2">
           <Link
             to="/catalogo"
             className="rounded-xl border border-neutral-700 px-3 py-2 text-sm text-neutral-300 transition hover:border-neutral-500"
@@ -42,6 +42,12 @@ export function InventoryItemsPage() {
             className="rounded-xl border border-neutral-700 px-3 py-2 text-sm text-neutral-300 transition hover:border-neutral-500"
           >
             Grupos
+          </Link>
+          <Link
+            to="/insumos/consumibles"
+            className="rounded-xl border border-neutral-700 px-3 py-2 text-sm text-neutral-300 transition hover:border-neutral-500"
+          >
+            Consumibles
           </Link>
           {isAdmin ? (
             <Link

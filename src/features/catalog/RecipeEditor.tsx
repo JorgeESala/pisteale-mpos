@@ -8,8 +8,14 @@ import { formatCurrency } from '@/lib/format'
 import { supabase } from '@/lib/supabase'
 import type { InventoryGroupCost, Product } from '@/types/database'
 import { recipeFormSchema, type RecipeForm } from './catalog-schemas'
-import { fetchInventoryGroups, fetchRecipe, fetchRecipeItems } from './queries'
-import { allowedRecipeUnits, recipeQuantityToBase } from './recipe-units'
+import {
+  fetchDefaultConsumables,
+  fetchIceDensity,
+  fetchInventoryGroups,
+  fetchRecipe,
+  fetchRecipeItems,
+} from './queries'
+import { allowedRecipeUnits, calculateIceGrams, recipeQuantityToBase } from './recipe-units'
 
 function groupUnitCost(
   group: InventoryGroupCost | undefined,
@@ -41,6 +47,16 @@ export function RecipeEditor({ product }: { product: Product }) {
   const groupsQuery = useQuery({
     queryKey: ['inventory_groups'],
     queryFn: fetchInventoryGroups,
+  })
+
+  const defaultsQuery = useQuery({
+    queryKey: ['recipe_default_consumables'],
+    queryFn: fetchDefaultConsumables,
+  })
+
+  const iceDensityQuery = useQuery({
+    queryKey: ['ice_density'],
+    queryFn: fetchIceDensity,
   })
 
   const recipeQuery = useQuery({
@@ -78,7 +94,10 @@ export function RecipeEditor({ product }: { product: Product }) {
 
   const watchedItems = useWatch({ control, name: 'items' }) ?? []
   const watchedYield = useWatch({ control, name: 'yieldQty' })
-  const groups = groupsQuery.data ?? []
+  const defaults = defaultsQuery.data ?? []
+  const iceDensity = iceDensityQuery.data ?? 0.9
+  const defaultGroupIds = new Set(defaults.map((item) => item.group_id))
+  const groups = (groupsQuery.data ?? []).filter((group) => !defaultGroupIds.has(group.group_id))
 
   useEffect(() => {
     const recipe = recipeQuery.data
@@ -152,16 +171,57 @@ export function RecipeEditor({ product }: { product: Product }) {
     else premiumBatchCost += qtyBase * premiumUnitCost
   }
 
+  let liquidMl = 0
+  for (const item of watchedItems) {
+    const group = groups.find((candidate) => candidate.group_id === item.inventory_group_id)
+    if (group?.base_unit === 'ml') {
+      liquidMl += recipeQuantityToBase(Number(item.qty) || 0, item.unit)
+    }
+  }
+
+  const appliesConsumables = product.kind === 'preparado'
+  const iceGrams = appliesConsumables
+    ? calculateIceGrams(product.serving_size_ml, liquidMl, iceDensity)
+    : 0
+  const activeDefaults = defaults.filter((item) => item.active)
+
+  let consumablesCost = 0
+  let consumablesComplete = !appliesConsumables || activeDefaults.length === 4
+
+  for (const item of activeDefaults) {
+    if (!appliesConsumables) break
+
+    const qty = item.role === 'ice' ? iceGrams : (item.qty_base ?? 0)
+
+    if (item.avg_cost === null) {
+      consumablesComplete = false
+      continue
+    }
+
+    consumablesCost += qty * item.avg_cost
+  }
+
   const yieldQty = Number(watchedYield) || 1
-  const normalCostPerServing = normalBatchCost / yieldQty
-  const premiumCostPerServing = premiumBatchCost / yieldQty
+  const normalRecipeCost = Math.round((normalBatchCost / yieldQty) * 100) / 100
+  const premiumRecipeCost = Math.round((premiumBatchCost / yieldQty) * 100) / 100
+  const roundedConsumablesCost = Math.round(consumablesCost * 100) / 100
+  const normalTotalCost = Math.round((normalRecipeCost + roundedConsumablesCost) * 100) / 100
+  const premiumTotalCost = Math.round((premiumRecipeCost + roundedConsumablesCost) * 100) / 100
+  const normalTotalComplete = normalComplete && consumablesComplete
+  const premiumTotalComplete = premiumComplete && consumablesComplete
   const hasRecipe = (recipeItemsQuery.data?.length ?? 0) > 0 || watchedItems.length > 0
 
   if (!isAdmin) {
     return null
   }
 
-  if (recipeQuery.isLoading || recipeItemsQuery.isLoading || groupsQuery.isLoading) {
+  if (
+    recipeQuery.isLoading ||
+    recipeItemsQuery.isLoading ||
+    groupsQuery.isLoading ||
+    defaultsQuery.isLoading ||
+    iceDensityQuery.isLoading
+  ) {
     return <p className="text-sm text-neutral-500">Cargando receta…</p>
   }
 
@@ -177,14 +237,14 @@ export function RecipeEditor({ product }: { product: Product }) {
         <span
           className={`shrink-0 rounded-full px-2 py-1 text-[11px] ${
             hasRecipe
-              ? normalComplete && premiumComplete
+              ? normalTotalComplete && premiumTotalComplete
                 ? 'bg-green-500/15 text-green-300'
                 : 'bg-yellow-500/15 text-yellow-300'
               : 'bg-amber-500/15 text-amber-300'
           }`}
         >
           {hasRecipe
-            ? normalComplete && premiumComplete
+            ? normalTotalComplete && premiumTotalComplete
               ? 'Completa'
               : 'Costo pendiente'
             : 'Receta pendiente'}
@@ -198,6 +258,45 @@ export function RecipeEditor({ product }: { product: Product }) {
             Crea el primero
           </Link>
           .
+        </div>
+      ) : null}
+
+      {appliesConsumables ? (
+        <div className="mt-4 rounded-xl border border-neutral-800 bg-neutral-950 p-3 text-sm">
+          <div className="flex items-center justify-between gap-3">
+            <p className="font-medium text-neutral-200">Incluye automáticamente</p>
+            <Link to="/insumos/consumibles" className="text-xs text-brand-300 underline">
+              Configurar
+            </Link>
+          </div>
+
+          {defaultsQuery.isError ? (
+            <p className="mt-2 text-red-300">{defaultsQuery.error.message}</p>
+          ) : null}
+
+          {activeDefaults.length === 0 ? (
+            <p className="mt-2 text-amber-300">No hay consumibles configurados.</p>
+          ) : (
+            <ul className="mt-2 space-y-1 text-neutral-400">
+              {activeDefaults.map((item) => (
+                <li key={item.id} className="flex justify-between gap-3">
+                  <span>{item.group_name}</span>
+                  <span>
+                    {item.role === 'ice'
+                      ? `${iceGrams} g`
+                      : `${item.qty_base ?? 0} ${item.base_unit}`}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <p className="mt-2 text-[11px] text-neutral-500">
+            Líquido de la receta: {liquidMl} ml · Capacidad del vaso: {product.serving_size_ml} ml
+            {liquidMl > product.serving_size_ml
+              ? ' · La receta líquida supera la capacidad; el hielo será 0.'
+              : ''}
+          </p>
         </div>
       ) : null}
 
@@ -373,35 +472,55 @@ export function RecipeEditor({ product }: { product: Product }) {
           ) : (
             <dl className="space-y-1 text-neutral-400">
               <div className="flex justify-between gap-3">
-                <dt>Costo normal por porción</dt>
-                <dd>{normalComplete ? formatCurrency(normalCostPerServing) : '—'}</dd>
+                <dt>Costo receta normal</dt>
+                <dd>{normalComplete ? formatCurrency(normalRecipeCost) : '—'}</dd>
+              </div>
+              {appliesConsumables ? (
+                <div className="flex justify-between gap-3">
+                  <dt>Consumibles</dt>
+                  <dd>{consumablesComplete ? formatCurrency(roundedConsumablesCost) : '—'}</dd>
+                </div>
+              ) : null}
+              <div className="flex justify-between gap-3 font-medium text-neutral-200">
+                <dt>Costo total normal</dt>
+                <dd>{normalTotalComplete ? formatCurrency(normalTotalCost) : '—'}</dd>
               </div>
               <div className="flex justify-between gap-3">
                 <dt>Margen normal</dt>
                 <dd>
-                  {normalComplete ? formatCurrency(product.price - normalCostPerServing) : '—'}
+                  {normalTotalComplete ? formatCurrency(product.price - normalTotalCost) : '—'}
                 </dd>
               </div>
               {product.premium_price !== null ? (
                 <>
-                  <div className="flex justify-between gap-3">
-                    <dt>Costo premium por porción</dt>
-                    <dd>{premiumComplete ? formatCurrency(premiumCostPerServing) : '—'}</dd>
+                  <div className="flex justify-between gap-3 pt-2">
+                    <dt>Costo receta premium</dt>
+                    <dd>{premiumComplete ? formatCurrency(premiumRecipeCost) : '—'}</dd>
+                  </div>
+                  {appliesConsumables ? (
+                    <div className="flex justify-between gap-3">
+                      <dt>Consumibles</dt>
+                      <dd>{consumablesComplete ? formatCurrency(roundedConsumablesCost) : '—'}</dd>
+                    </div>
+                  ) : null}
+                  <div className="flex justify-between gap-3 font-medium text-neutral-200">
+                    <dt>Costo total premium</dt>
+                    <dd>{premiumTotalComplete ? formatCurrency(premiumTotalCost) : '—'}</dd>
                   </div>
                   <div className="flex justify-between gap-3">
                     <dt>Margen premium</dt>
                     <dd>
-                      {premiumComplete
-                        ? formatCurrency(product.premium_price - premiumCostPerServing)
+                      {premiumTotalComplete
+                        ? formatCurrency(product.premium_price - premiumTotalCost)
                         : '—'}
                     </dd>
                   </div>
                 </>
               ) : null}
-              {!normalComplete || (product.premium_price !== null && !premiumComplete) ? (
+              {!normalTotalComplete || (product.premium_price !== null && !premiumTotalComplete) ? (
                 <p className="pt-1 text-yellow-300">
-                  Hay grupos sin costo o sin marcas del tier. El margen es estimado hasta
-                  capturarlos.
+                  Hay grupos sin costo, marcas del tier o consumibles sin costo. El margen es
+                  estimado hasta capturarlos.
                 </p>
               ) : null}
             </dl>

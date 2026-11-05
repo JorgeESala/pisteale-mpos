@@ -45,7 +45,7 @@ export function ProductFormPage() {
       price: 120,
       premiumPrice: 150,
       isAlcoholic: true,
-      servingSizeMl: 1000,
+      servingSizeMl: 940,
       active: true,
       notes: '',
     },
@@ -235,7 +235,7 @@ export function ProductFormPage() {
 
           <div>
             <label htmlFor="servingSizeMl" className="mb-1.5 block text-sm text-neutral-300">
-              Tamaño (ml)
+              Capacidad (ml)
             </label>
             <input
               id="servingSizeMl"

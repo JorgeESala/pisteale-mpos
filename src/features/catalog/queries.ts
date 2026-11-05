@@ -8,6 +8,7 @@ import type {
   ProductCategory,
   ProductCost,
   Recipe,
+  RecipeDefaultConsumableView,
   RecipeItem,
 } from '@/types/database'
 
@@ -113,4 +114,27 @@ export async function fetchRecipeItems(recipeId: string): Promise<RecipeItem[]> 
   if (error) throw error
 
   return data
+}
+
+export async function fetchDefaultConsumables(): Promise<RecipeDefaultConsumableView[]> {
+  const { data, error } = await supabase
+    .from('v_recipe_default_consumables')
+    .select('*')
+    .order('sort_order')
+
+  if (error) throw error
+
+  return data
+}
+
+export async function fetchIceDensity(): Promise<number> {
+  const { data, error } = await supabase
+    .from('app_settings')
+    .select('value')
+    .eq('key', 'ice_density_g_per_ml')
+    .maybeSingle()
+
+  if (error) throw error
+
+  return typeof data?.value === 'number' ? data.value : 0.9
 }

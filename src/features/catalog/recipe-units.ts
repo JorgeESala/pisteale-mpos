@@ -12,3 +12,7 @@ export function recipeQuantityToBase(qty: number, unit: RecipeInputUnit): number
   if (unit === 'oz') return Math.round(qty * ML_PER_OZ)
   return Math.round(qty)
 }
+
+export function calculateIceGrams(servingSizeMl: number, liquidMl: number, density = 0.9): number {
+  return Math.round(Math.max(0, servingSizeMl - liquidMl) * density)
+}

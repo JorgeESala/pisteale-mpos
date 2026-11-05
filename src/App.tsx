@@ -5,6 +5,7 @@ import { AuthProvider } from '@/features/auth/AuthProvider'
 import { LoginPage } from '@/features/auth/LoginPage'
 import { ProtectedRoute } from '@/features/auth/ProtectedRoute'
 import { CatalogPage } from '@/features/catalog/CatalogPage'
+import { DefaultConsumablesPage } from '@/features/catalog/DefaultConsumablesPage'
 import { GroupFormPage } from '@/features/catalog/GroupFormPage'
 import { GroupsPage } from '@/features/catalog/GroupsPage'
 import { InventoryItemFormPage } from '@/features/catalog/InventoryItemFormPage'
@@ -87,6 +88,16 @@ export default function App() {
                 <ProtectedRoute>
                   <AppShell>
                     <GroupFormPage />
+                  </AppShell>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/insumos/consumibles"
+              element={
+                <ProtectedRoute>
+                  <AppShell>
+                    <DefaultConsumablesPage />
                   </AppShell>
                 </ProtectedRoute>
               }

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { allowedRecipeUnits, ML_PER_OZ, recipeQuantityToBase } from './recipe-units'
+import {
+  allowedRecipeUnits,
+  calculateIceGrams,
+  ML_PER_OZ,
+  recipeQuantityToBase,
+} from './recipe-units'
 
 describe('recipe units', () => {
   it('uses 30 ml per ounce', () => {
@@ -21,5 +26,15 @@ describe('recipe units', () => {
     expect(allowedRecipeUnits('ml')).toEqual(['ml', 'oz'])
     expect(allowedRecipeUnits('g')).toEqual(['g'])
     expect(allowedRecipeUnits('pza')).toEqual(['pza'])
+  })
+
+  it('calculates ice from the remaining cup volume', () => {
+    expect(calculateIceGrams(940, 600)).toBe(306)
+    expect(calculateIceGrams(940, 500)).toBe(396)
+  })
+
+  it('returns zero ice when the liquid fills the cup', () => {
+    expect(calculateIceGrams(940, 940)).toBe(0)
+    expect(calculateIceGrams(940, 1000)).toBe(0)
   })
 })

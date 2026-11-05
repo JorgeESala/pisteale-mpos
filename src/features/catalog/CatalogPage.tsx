@@ -140,6 +140,11 @@ export function CatalogPage() {
                   </p>
                 </div>
               </div>
+              {product.consumables_cost !== null ? (
+                <p className="mt-2 text-[11px] text-neutral-500">
+                  Incluye consumibles: {formatCurrency(product.consumables_cost)}
+                </p>
+              ) : null}
             </Link>
           ))}
         </div>

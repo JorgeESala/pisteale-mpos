@@ -7,6 +7,7 @@ export type BaseUnit = 'ml' | 'g' | 'pza'
 export type InventoryTier = 'estandar' | 'premium'
 export type RecipeTierRule = 'any' | 'estandar' | 'premium' | 'match'
 export type RecipeInputUnit = 'ml' | 'oz' | 'g' | 'pza'
+export type DefaultConsumableRole = 'ice' | 'cup' | 'lid' | 'straw'
 
 export type Profile = {
   id: string
@@ -154,6 +155,32 @@ export type RecipeItem = {
   created_at: string
 }
 
+export type RecipeDefaultConsumable = {
+  id: string
+  inventory_group_id: string
+  role: DefaultConsumableRole
+  qty_base: number | null
+  applies_to_kind: ProductKind
+  active: boolean
+  sort_order: number
+  created_at: string
+  updated_at: string
+}
+
+export type RecipeDefaultConsumableView = {
+  id: string
+  group_id: string
+  group_name: string
+  base_unit: BaseUnit
+  role: DefaultConsumableRole
+  qty_base: number | null
+  applies_to_kind: ProductKind
+  active: boolean
+  sort_order: number
+  avg_cost: number | null
+  all_cost_count: number
+}
+
 export type ProductCost = {
   product_id: string
   name: string
@@ -163,6 +190,9 @@ export type ProductCost = {
   premium_price: number | null
   is_alcoholic: boolean
   active: boolean
+  normal_recipe_cost: number | null
+  premium_recipe_cost: number | null
+  consumables_cost: number | null
   normal_cost: number | null
   normal_margin: number | null
   premium_cost: number | null
@@ -241,6 +271,12 @@ export type Database = {
         Update: never
         Relationships: []
       }
+      recipe_default_consumables: {
+        Row: RecipeDefaultConsumable
+        Insert: never
+        Update: never
+        Relationships: []
+      }
     }
     Views: {
       v_inventory_group_costs: {
@@ -255,6 +291,10 @@ export type Database = {
         Row: ProductCost
         Relationships: []
       }
+      v_recipe_default_consumables: {
+        Row: RecipeDefaultConsumableView
+        Relationships: []
+      }
     }
     Functions: {
       ping: {
@@ -264,6 +304,18 @@ export type Database = {
       product_cost: {
         Args: { p_product_id: string; p_tier: string }
         Returns: number | null
+      }
+      product_recipe_cost: {
+        Args: { p_product_id: string; p_tier: string }
+        Returns: number | null
+      }
+      product_consumables_cost: {
+        Args: { p_product_id: string }
+        Returns: number | null
+      }
+      save_recipe_default_consumables: {
+        Args: { p_items: Json; p_ice_density: number }
+        Returns: undefined
       }
       update_my_profile: {
         Args: { p_full_name: string }
