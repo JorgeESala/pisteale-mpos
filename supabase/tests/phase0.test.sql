@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select extensions.plan(50);
+select extensions.plan(57);
 
 delete from auth.users
 where id in (
@@ -13,6 +13,7 @@ where id in (
 
 delete from public.document_sequences;
 delete from public.profiles;
+delete from public.ice_daily_records;
 
 insert into auth.users (
   id,
@@ -706,32 +707,53 @@ select extensions.throws_ok(
 );
 
 select extensions.is(
+  (select consumables_cost from public.v_product_costs where product_id = '77777777-7777-7777-7777-777777777777'),
+  null::numeric,
+  'consumables cost waits for daily ice records'
+);
+
+select public.upsert_ice_daily_record(null, current_date - 1, 1, 10, 20, '');
+select public.upsert_ice_daily_record(null, current_date - 2, 1, 15, 30, '');
+
+select extensions.is(
+  (select cost_per_drink from public.v_ice_daily_records where record_date = current_date - 1),
+  0.50::numeric,
+  'daily ice cost per drink is calculated'
+);
+
+select extensions.is(
+  (select cost_per_drink from public.v_ice_cost_7d),
+  0.50::numeric,
+  '7-day ice average is weighted'
+);
+
+select extensions.is(
   (select normal_cost from public.v_product_costs where product_id = '77777777-7777-7777-7777-777777777777'),
-  6.91::numeric,
+  6.60::numeric,
   'normal product cost is calculated'
 );
 
 select extensions.is(
   (select premium_cost from public.v_product_costs where product_id = '77777777-7777-7777-7777-777777777777'),
-  11.41::numeric,
+  11.10::numeric,
   'premium product cost is calculated'
 );
 
 select extensions.is(
   (select consumables_cost from public.v_product_costs where product_id = '77777777-7777-7777-7777-777777777777'),
-  2.41::numeric,
+  2.10::numeric,
   'consumables cost is included'
 );
 
 select extensions.is(
   (select normal_margin from public.v_product_costs where product_id = '77777777-7777-7777-7777-777777777777'),
-  113.09::numeric,
+  113.40::numeric,
   'normal product margin is calculated'
 );
 
 select extensions.is(
   (select premium_margin from public.v_product_costs where product_id = '77777777-7777-7777-7777-777777777777'),
-  138.59::numeric,
+  138.90::numeric,
   'premium product margin is calculated'
 );
 
@@ -775,6 +797,49 @@ select extensions.ok(
   'operator can read catalog'
 );
 
+select extensions.ok(
+  (
+    select public.upsert_ice_daily_record(null, current_date - 3, 1, 5, 10, 'Operador')
+      is not null
+  ),
+  'operator can record daily ice'
+);
+
+select extensions.throws_ok(
+  $sql$select public.delete_ice_daily_record((select id from public.ice_daily_records where record_date = current_date - 3))$sql$,
+  '42501',
+  'No autorizado',
+  'operator cannot delete daily ice'
+);
+
+reset role;
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claim.sub',
+  '11111111-1111-1111-1111-111111111111',
+  true
+);
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"11111111-1111-1111-1111-111111111111","role":"authenticated"}',
+  true
+);
+
+select public.delete_ice_daily_record(
+  (select id from public.ice_daily_records where record_date = current_date - 3)
+);
+
+select extensions.is(
+  (
+    select count(*)
+    from public.ice_daily_records
+    where record_date = current_date - 3
+  ),
+  0::bigint,
+  'admin deletes daily ice'
+);
+
 reset role;
 
 set local role anon;
@@ -786,6 +851,13 @@ select extensions.throws_ok(
   '42501',
   'permission denied for table products',
   'anon cannot read catalog'
+);
+
+select extensions.throws_ok(
+  $sql$select count(*) from public.ice_daily_records$sql$,
+  '42501',
+  'permission denied for table ice_daily_records',
+  'anon cannot read daily ice records'
 );
 
 reset role;

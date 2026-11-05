@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   defaultConsumablesFormSchema,
+  iceDailyRecordFormSchema,
   inventoryGroupFormSchema,
   inventoryItemFormSchema,
   productFormSchema,
@@ -189,6 +190,32 @@ describe('defaultConsumablesFormSchema', () => {
       cupActive: true,
       lidActive: true,
       strawActive: true,
+    })
+
+    expect(result.success).toBe(false)
+  })
+})
+
+describe('iceDailyRecordFormSchema', () => {
+  it('accepts a valid daily ice record', () => {
+    const result = iceDailyRecordFormSchema.safeParse({
+      recordDate: '2026-11-05',
+      bags: 2,
+      totalCost: 100,
+      drinksSold: 14,
+      notes: '',
+    })
+
+    expect(result.success).toBe(true)
+  })
+
+  it('rejects a record without drinks sold', () => {
+    const result = iceDailyRecordFormSchema.safeParse({
+      recordDate: '2026-11-05',
+      bags: null,
+      totalCost: 100,
+      drinksSold: 0,
+      notes: '',
     })
 
     expect(result.success).toBe(false)

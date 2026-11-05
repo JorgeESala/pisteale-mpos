@@ -144,6 +144,12 @@ export function DashboardPage() {
             Consumibles
           </Link>
           <Link
+            to="/insumos/hielo"
+            className="rounded-xl border border-neutral-700 px-3 py-3 text-center text-neutral-200 transition hover:border-neutral-500"
+          >
+            Hielo del día
+          </Link>
+          <Link
             to="/perfil"
             className="rounded-xl border border-neutral-700 px-3 py-3 text-center text-neutral-200 transition hover:border-neutral-500"
           >

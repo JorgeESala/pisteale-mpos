@@ -181,6 +181,29 @@ export type RecipeDefaultConsumableView = {
   all_cost_count: number
 }
 
+export type IceDailyRecord = {
+  id: string
+  record_date: string
+  bags: number | null
+  total_cost: number
+  drinks_sold: number
+  notes: string
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type IceDailyRecordView = IceDailyRecord & {
+  cost_per_drink: number
+}
+
+export type IceCost7d = {
+  days_count: number
+  date_from: string | null
+  date_to: string | null
+  cost_per_drink: number | null
+}
+
 export type ProductCost = {
   product_id: string
   name: string
@@ -277,8 +300,22 @@ export type Database = {
         Update: never
         Relationships: []
       }
+      ice_daily_records: {
+        Row: IceDailyRecord
+        Insert: never
+        Update: never
+        Relationships: []
+      }
     }
     Views: {
+      v_ice_daily_records: {
+        Row: IceDailyRecordView
+        Relationships: []
+      }
+      v_ice_cost_7d: {
+        Row: IceCost7d
+        Relationships: []
+      }
       v_inventory_group_costs: {
         Row: InventoryGroupCost
         Relationships: []
@@ -315,6 +352,21 @@ export type Database = {
       }
       save_recipe_default_consumables: {
         Args: { p_items: Json; p_ice_density: number }
+        Returns: undefined
+      }
+      upsert_ice_daily_record: {
+        Args: {
+          p_id: string | null
+          p_record_date: string
+          p_bags: number | null
+          p_total_cost: number
+          p_drinks_sold: number
+          p_notes: string
+        }
+        Returns: string
+      }
+      delete_ice_daily_record: {
+        Args: { p_id: string }
         Returns: undefined
       }
       update_my_profile: {

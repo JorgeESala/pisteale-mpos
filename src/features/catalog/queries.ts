@@ -1,5 +1,7 @@
 import { supabase } from '@/lib/supabase'
 import type {
+  IceCost7d,
+  IceDailyRecordView,
   InventoryCategory,
   InventoryGroup,
   InventoryGroupCost,
@@ -137,4 +139,61 @@ export async function fetchIceDensity(): Promise<number> {
   if (error) throw error
 
   return typeof data?.value === 'number' ? data.value : 0.9
+}
+
+export async function fetchIceDailyRecords(): Promise<IceDailyRecordView[]> {
+  const { data, error } = await supabase
+    .from('v_ice_daily_records')
+    .select('*')
+    .order('record_date', { ascending: false })
+    .limit(30)
+
+  if (error) throw error
+
+  return data
+}
+
+export async function fetchIceCost7d(): Promise<IceCost7d> {
+  const { data, error } = await supabase.from('v_ice_cost_7d').select('*').maybeSingle()
+
+  if (error) throw error
+
+  return (
+    data ?? {
+      days_count: 0,
+      date_from: null,
+      date_to: null,
+      cost_per_drink: null,
+    }
+  )
+}
+
+type IceDailyRecordInput = {
+  id: string | null
+  recordDate: string
+  bags: number | null
+  totalCost: number
+  drinksSold: number
+  notes: string
+}
+
+export async function upsertIceDailyRecord(input: IceDailyRecordInput): Promise<string> {
+  const { data, error } = await supabase.rpc('upsert_ice_daily_record', {
+    p_id: input.id,
+    p_record_date: input.recordDate,
+    p_bags: input.bags,
+    p_total_cost: input.totalCost,
+    p_drinks_sold: input.drinksSold,
+    p_notes: input.notes,
+  })
+
+  if (error) throw error
+
+  return data
+}
+
+export async function deleteIceDailyRecord(id: string): Promise<void> {
+  const { error } = await supabase.rpc('delete_ice_daily_record', { p_id: id })
+
+  if (error) throw error
 }

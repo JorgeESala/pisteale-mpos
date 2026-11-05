@@ -10,6 +10,7 @@ import type { InventoryGroupCost, Product } from '@/types/database'
 import { recipeFormSchema, type RecipeForm } from './catalog-schemas'
 import {
   fetchDefaultConsumables,
+  fetchIceCost7d,
   fetchIceDensity,
   fetchInventoryGroups,
   fetchRecipe,
@@ -57,6 +58,11 @@ export function RecipeEditor({ product }: { product: Product }) {
   const iceDensityQuery = useQuery({
     queryKey: ['ice_density'],
     queryFn: fetchIceDensity,
+  })
+
+  const iceCostQuery = useQuery({
+    queryKey: ['ice_cost_7d'],
+    queryFn: fetchIceCost7d,
   })
 
   const recipeQuery = useQuery({
@@ -184,21 +190,32 @@ export function RecipeEditor({ product }: { product: Product }) {
     ? calculateIceGrams(product.serving_size_ml, liquidMl, iceDensity)
     : 0
   const activeDefaults = defaults.filter((item) => item.active)
+  const iceCostPerDrink = iceCostQuery.data?.cost_per_drink ?? null
 
   let consumablesCost = 0
-  let consumablesComplete = !appliesConsumables || activeDefaults.length === 4
+  let consumablesComplete = !appliesConsumables
 
-  for (const item of activeDefaults) {
-    if (!appliesConsumables) break
+  if (appliesConsumables) {
+    consumablesComplete = true
 
-    const qty = item.role === 'ice' ? iceGrams : (item.qty_base ?? 0)
+    for (const item of activeDefaults) {
+      if (item.role === 'ice') {
+        if (iceCostPerDrink === null) {
+          consumablesComplete = false
+          continue
+        }
 
-    if (item.avg_cost === null) {
-      consumablesComplete = false
-      continue
+        consumablesCost += iceCostPerDrink
+        continue
+      }
+
+      if (item.avg_cost === null || (item.qty_base ?? 0) <= 0) {
+        consumablesComplete = false
+        continue
+      }
+
+      consumablesCost += (item.qty_base ?? 0) * item.avg_cost
     }
-
-    consumablesCost += qty * item.avg_cost
   }
 
   const yieldQty = Number(watchedYield) || 1
@@ -220,7 +237,8 @@ export function RecipeEditor({ product }: { product: Product }) {
     recipeItemsQuery.isLoading ||
     groupsQuery.isLoading ||
     defaultsQuery.isLoading ||
-    iceDensityQuery.isLoading
+    iceDensityQuery.isLoading ||
+    iceCostQuery.isLoading
   ) {
     return <p className="text-sm text-neutral-500">Cargando receta…</p>
   }
@@ -274,6 +292,10 @@ export function RecipeEditor({ product }: { product: Product }) {
             <p className="mt-2 text-red-300">{defaultsQuery.error.message}</p>
           ) : null}
 
+          {iceCostQuery.isError ? (
+            <p className="mt-2 text-red-300">{iceCostQuery.error.message}</p>
+          ) : null}
+
           {activeDefaults.length === 0 ? (
             <p className="mt-2 text-amber-300">No hay consumibles configurados.</p>
           ) : (
@@ -290,6 +312,18 @@ export function RecipeEditor({ product }: { product: Product }) {
               ))}
             </ul>
           )}
+
+          {activeDefaults.some((item) => item.role === 'ice') ? (
+            <p className="mt-2 text-[11px] text-neutral-500">
+              Costo de hielo:{' '}
+              {iceCostPerDrink === null
+                ? 'pendiente de cierre diario.'
+                : `${formatCurrency(iceCostPerDrink)} por bebida (promedio 7 días).`}{' '}
+              <Link to="/insumos/hielo" className="text-brand-300 underline">
+                Registrar cierre
+              </Link>
+            </p>
+          ) : null}
 
           <p className="mt-2 text-[11px] text-neutral-500">
             Líquido de la receta: {liquidMl} ml · Capacidad del vaso: {product.serving_size_ml} ml

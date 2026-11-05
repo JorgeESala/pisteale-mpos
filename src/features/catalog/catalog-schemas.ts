@@ -82,3 +82,13 @@ export const defaultConsumablesFormSchema = z.object({
 })
 
 export type DefaultConsumablesForm = z.infer<typeof defaultConsumablesFormSchema>
+
+export const iceDailyRecordFormSchema = z.object({
+  recordDate: z.string().min(1, 'La fecha es obligatoria'),
+  bags: z.number().min(0, 'Bolsas inválidas').nullable(),
+  totalCost: z.number().min(0, 'Gasto inválido'),
+  drinksSold: z.number().int().positive('Bebidas inválidas'),
+  notes: z.string().max(1000, 'Máximo 1000 caracteres'),
+})
+
+export type IceDailyRecordForm = z.infer<typeof iceDailyRecordFormSchema>

@@ -49,6 +49,12 @@ export function InventoryItemsPage() {
           >
             Consumibles
           </Link>
+          <Link
+            to="/insumos/hielo"
+            className="rounded-xl border border-neutral-700 px-3 py-2 text-sm text-neutral-300 transition hover:border-neutral-500"
+          >
+            Hielo del día
+          </Link>
           {isAdmin ? (
             <Link
               to="/insumos/nuevo"
@@ -118,6 +124,11 @@ export function InventoryItemsPage() {
                 <span className="rounded-full bg-neutral-800 px-2 py-1 text-neutral-400">
                   Mínimo: {item.min_stock_base} {item.base_unit}
                 </span>
+                {!item.track_stock ? (
+                  <span className="rounded-full bg-neutral-800 px-2 py-1 text-neutral-400">
+                    No inventariable
+                  </span>
+                ) : null}
                 {!item.active ? (
                   <span className="rounded-full bg-neutral-800 px-2 py-1 text-neutral-400">
                     Inactivo

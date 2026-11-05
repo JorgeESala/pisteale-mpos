@@ -8,6 +8,7 @@ import { CatalogPage } from '@/features/catalog/CatalogPage'
 import { DefaultConsumablesPage } from '@/features/catalog/DefaultConsumablesPage'
 import { GroupFormPage } from '@/features/catalog/GroupFormPage'
 import { GroupsPage } from '@/features/catalog/GroupsPage'
+import { IceDailyPage } from '@/features/catalog/IceDailyPage'
 import { InventoryItemFormPage } from '@/features/catalog/InventoryItemFormPage'
 import { InventoryItemsPage } from '@/features/catalog/InventoryItemsPage'
 import { ProductFormPage } from '@/features/catalog/ProductFormPage'
@@ -98,6 +99,16 @@ export default function App() {
                 <ProtectedRoute>
                   <AppShell>
                     <DefaultConsumablesPage />
+                  </AppShell>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/insumos/hielo"
+              element={
+                <ProtectedRoute>
+                  <AppShell>
+                    <IceDailyPage />
                   </AppShell>
                 </ProtectedRoute>
               }

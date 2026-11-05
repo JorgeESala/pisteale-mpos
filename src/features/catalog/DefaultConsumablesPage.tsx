@@ -4,9 +4,15 @@ import { useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { Link } from 'react-router-dom'
 import { useAuth } from '@/features/auth/auth-context'
+import { formatCurrency } from '@/lib/format'
 import { supabase } from '@/lib/supabase'
 import { defaultConsumablesFormSchema, type DefaultConsumablesForm } from './catalog-schemas'
-import { fetchDefaultConsumables, fetchIceDensity, fetchInventoryGroups } from './queries'
+import {
+  fetchDefaultConsumables,
+  fetchIceCost7d,
+  fetchIceDensity,
+  fetchInventoryGroups,
+} from './queries'
 
 export function DefaultConsumablesPage() {
   const { profile } = useAuth()
@@ -26,6 +32,11 @@ export function DefaultConsumablesPage() {
   const densityQuery = useQuery({
     queryKey: ['ice_density'],
     queryFn: fetchIceDensity,
+  })
+
+  const iceCostQuery = useQuery({
+    queryKey: ['ice_cost_7d'],
+    queryFn: fetchIceCost7d,
   })
 
   const {
@@ -130,12 +141,23 @@ export function DefaultConsumablesPage() {
     )
   }
 
-  if (defaultsQuery.isLoading || groupsQuery.isLoading || densityQuery.isLoading) {
+  if (
+    defaultsQuery.isLoading ||
+    groupsQuery.isLoading ||
+    densityQuery.isLoading ||
+    iceCostQuery.isLoading
+  ) {
     return <p className="text-sm text-neutral-500">Cargando consumibles…</p>
   }
 
-  if (defaultsQuery.isError || groupsQuery.isError || densityQuery.isError) {
-    const error = defaultsQuery.error ?? groupsQuery.error ?? densityQuery.error
+  if (
+    defaultsQuery.isError ||
+    groupsQuery.isError ||
+    densityQuery.isError ||
+    iceCostQuery.isError
+  ) {
+    const error =
+      defaultsQuery.error ?? groupsQuery.error ?? densityQuery.error ?? iceCostQuery.error
     return (
       <p className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
         {error?.message}
@@ -173,7 +195,37 @@ export function DefaultConsumablesPage() {
       >
         <div className="rounded-xl border border-neutral-800 bg-neutral-950 p-3 text-sm text-neutral-400">
           Todas las bebidas preparadas incluyen automáticamente hielo, vaso, tapa y popote. El hielo
-          se calcula con la capacidad del vaso menos el líquido de la receta.
+          se calcula con la capacidad del vaso menos el líquido de la receta; los gramos son solo
+          referencia. El costo del hielo se toma del promedio de los últimos 7 cierres diarios.
+        </div>
+
+        <div className="rounded-xl border border-neutral-800 bg-neutral-950 p-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium text-neutral-200">Hielo del día</p>
+              <p className="mt-1 text-sm text-neutral-400">
+                {iceCostQuery.data?.cost_per_drink !== null &&
+                iceCostQuery.data?.cost_per_drink !== undefined
+                  ? `Costo promedio 7 días: ${formatCurrency(iceCostQuery.data.cost_per_drink)} por bebida`
+                  : 'Sin cierres diarios: el costo de hielo queda pendiente.'}
+              </p>
+              {iceCostQuery.data && iceCostQuery.data.days_count > 0 ? (
+                <p className="mt-1 text-[11px] text-neutral-500">
+                  {iceCostQuery.data.days_count}{' '}
+                  {iceCostQuery.data.days_count === 1
+                    ? 'cierre considerado'
+                    : 'cierres considerados'}
+                  .
+                </p>
+              ) : null}
+            </div>
+            <Link
+              to="/insumos/hielo"
+              className="shrink-0 rounded-xl border border-neutral-700 px-3 py-2 text-sm text-neutral-300 transition hover:border-neutral-500"
+            >
+              Hielo del día
+            </Link>
+          </div>
         </div>
 
         <div>
@@ -328,7 +380,7 @@ export function DefaultConsumablesPage() {
 
         <div>
           <label htmlFor="iceDensity" className="mb-1.5 block text-sm text-neutral-300">
-            Densidad del hielo (g/ml)
+            Densidad del hielo (referencia, g/ml)
           </label>
           <input
             id="iceDensity"
