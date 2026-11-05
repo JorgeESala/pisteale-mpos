@@ -13,6 +13,11 @@ import { InventoryItemFormPage } from '@/features/catalog/InventoryItemFormPage'
 import { InventoryItemsPage } from '@/features/catalog/InventoryItemsPage'
 import { ProductFormPage } from '@/features/catalog/ProductFormPage'
 import { DashboardPage } from '@/features/dashboard/DashboardPage'
+import { MovementsPage } from '@/features/inventory/MovementsPage'
+import { PurchaseDetailPage } from '@/features/inventory/PurchaseDetailPage'
+import { PurchasesPage } from '@/features/inventory/PurchasesPage'
+import { StockDetailPage } from '@/features/inventory/StockDetailPage'
+import { StockPage } from '@/features/inventory/StockPage'
 import { ProfilePage } from '@/features/profile/ProfilePage'
 import { queryClient } from '@/lib/queryClient'
 
@@ -109,6 +114,56 @@ export default function App() {
                 <ProtectedRoute>
                   <AppShell>
                     <IceDailyPage />
+                  </AppShell>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/insumos/stock"
+              element={
+                <ProtectedRoute>
+                  <AppShell>
+                    <StockPage />
+                  </AppShell>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/insumos/stock/:id"
+              element={
+                <ProtectedRoute>
+                  <AppShell>
+                    <StockDetailPage />
+                  </AppShell>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/insumos/movimientos"
+              element={
+                <ProtectedRoute>
+                  <AppShell>
+                    <MovementsPage />
+                  </AppShell>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/insumos/compras"
+              element={
+                <ProtectedRoute>
+                  <AppShell>
+                    <PurchasesPage />
+                  </AppShell>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/insumos/compras/:id"
+              element={
+                <ProtectedRoute>
+                  <AppShell>
+                    <PurchaseDetailPage />
                   </AppShell>
                 </ProtectedRoute>
               }

@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select extensions.plan(57);
+select extensions.plan(72);
 
 delete from auth.users
 where id in (
@@ -14,6 +14,9 @@ where id in (
 delete from public.document_sequences;
 delete from public.profiles;
 delete from public.ice_daily_records;
+delete from public.inventory_movements;
+delete from public.purchase_items;
+delete from public.purchases;
 
 insert into auth.users (
   id,
@@ -757,6 +760,130 @@ select extensions.is(
   'premium product margin is calculated'
 );
 
+select extensions.ok(
+  (
+    select public.create_purchase(
+      current_date,
+      'Proveedor Test',
+      'F-001',
+      '',
+      '[{"item_id":"55555555-5555-5555-5555-555555555555","qty_purchase":1,"total_cost":100}]'::jsonb
+    ) is not null
+  ),
+  'admin creates purchase'
+);
+
+select extensions.ok(
+  (select folio from public.purchases order by created_at limit 1) like 'CMP-%',
+  'purchase folio is generated'
+);
+
+select extensions.is(
+  (select total_cost from public.purchases order by created_at limit 1),
+  100.00::numeric,
+  'purchase total is calculated'
+);
+
+select extensions.is(
+  (
+    select qty_base
+    from public.inventory_movements
+    where purchase_id = (select id from public.purchases order by created_at limit 1)
+      and item_id = '55555555-5555-5555-5555-555555555555'::uuid
+  ),
+  750::numeric,
+  'purchase creates inventory movement'
+);
+
+select extensions.is(
+  (select avg_cost from public.inventory_items where id = '55555555-5555-5555-5555-555555555555'),
+  0.133333::numeric,
+  'purchase updates item average cost'
+);
+
+select public.create_purchase(
+  current_date,
+  'Proveedor Test',
+  'F-002',
+  '',
+  '[{"item_id":"55555555-5555-5555-5555-555555555555","qty_purchase":1,"total_cost":200}]'::jsonb
+);
+
+select extensions.is(
+  (select avg_cost from public.inventory_items where id = '55555555-5555-5555-5555-555555555555'),
+  0.2::numeric,
+  'second purchase updates weighted average'
+);
+
+select extensions.is(
+  (
+    select current_qty_base
+    from public.v_inventory_stock
+    where item_id = '55555555-5555-5555-5555-555555555555'
+  ),
+  1500::numeric,
+  'stock view sums purchases'
+);
+
+select extensions.is(
+  public.adjust_inventory_item(
+    '55555555-5555-5555-5555-555555555555'::uuid,
+    1400,
+    'Conteo físico'
+  ),
+  (-100)::numeric,
+  'admin adjusts inventory count'
+);
+
+select extensions.is(
+  (
+    select current_qty_base
+    from public.v_inventory_stock
+    where item_id = '55555555-5555-5555-5555-555555555555'
+  ),
+  1400::numeric,
+  'adjustment updates stock view'
+);
+
+select extensions.throws_ok(
+  $sql$select public.create_purchase(
+    current_date,
+    '',
+    '',
+    '',
+    jsonb_build_array(
+      jsonb_build_object(
+        'item_id',
+        (
+          select i.id
+          from public.inventory_items i
+          join public.inventory_item_groups g on g.id = i.group_id
+          where g.name = 'Hielo'
+          limit 1
+        ),
+        'qty_purchase', 1,
+        'total_cost', 10
+      )
+    )
+  )$sql$,
+  '22023',
+  'El insumo Hielo no lleva inventario',
+  'purchase rejects non-stock item'
+);
+
+select extensions.throws_ok(
+  $sql$select public.create_purchase(
+    current_date,
+    '',
+    '',
+    '',
+    '[{"item_id":"55555555-5555-5555-5555-555555555555","qty_purchase":1,"total_cost":10},{"item_id":"55555555-5555-5555-5555-555555555555","qty_purchase":1,"total_cost":10}]'::jsonb
+  )$sql$,
+  '22023',
+  'Insumo duplicado en la compra',
+  'purchase rejects duplicate items'
+);
+
 select public.upsert_product(
   '88888888-8888-8888-8888-888888888888'::uuid,
   'Test Sin Receta',
@@ -812,6 +939,30 @@ select extensions.throws_ok(
   'operator cannot delete daily ice'
 );
 
+select extensions.throws_ok(
+  $sql$select public.create_purchase(
+    current_date,
+    '',
+    '',
+    '',
+    '[{"item_id":"55555555-5555-5555-5555-555555555555","qty_purchase":1,"total_cost":10}]'::jsonb
+  )$sql$,
+  '42501',
+  'No autorizado',
+  'operator cannot create purchase'
+);
+
+select extensions.throws_ok(
+  $sql$select public.adjust_inventory_item(
+    '55555555-5555-5555-5555-555555555555'::uuid,
+    1500,
+    ''
+  )$sql$,
+  '42501',
+  'No autorizado',
+  'operator cannot adjust inventory'
+);
+
 reset role;
 
 set local role authenticated;
@@ -858,6 +1009,20 @@ select extensions.throws_ok(
   '42501',
   'permission denied for table ice_daily_records',
   'anon cannot read daily ice records'
+);
+
+select extensions.throws_ok(
+  $sql$select count(*) from public.purchases$sql$,
+  '42501',
+  'permission denied for table purchases',
+  'anon cannot read purchases'
+);
+
+select extensions.throws_ok(
+  $sql$select count(*) from public.inventory_movements$sql$,
+  '42501',
+  'permission denied for table inventory_movements',
+  'anon cannot read inventory movements'
 );
 
 reset role;

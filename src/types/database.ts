@@ -204,6 +204,93 @@ export type IceCost7d = {
   cost_per_drink: number | null
 }
 
+export type InventoryMovementType =
+  'purchase' | 'adjustment' | 'opening' | 'consumption' | 'waste' | 'transfer'
+
+export type InventoryStockStatus = 'ok' | 'low' | 'out' | 'no_stock'
+
+export type Purchase = {
+  id: string
+  folio: string
+  purchase_date: string
+  supplier: string
+  invoice_ref: string
+  notes: string
+  total_cost: number
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type PurchaseView = Purchase & {
+  item_count: number
+  created_by_name: string | null
+}
+
+export type PurchaseItem = {
+  id: string
+  purchase_id: string
+  item_id: string
+  purchase_unit: string
+  purchase_factor: number
+  qty_purchase: number
+  qty_base: number
+  total_cost: number
+  created_at: string
+}
+
+export type PurchaseItemView = PurchaseItem & {
+  item_name: string
+  group_id: string
+  group_name: string
+  base_unit: BaseUnit
+  unit_cost_base: number
+}
+
+export type InventoryMovement = {
+  id: string
+  item_id: string
+  movement_type: InventoryMovementType
+  qty_base: number
+  unit_cost: number
+  total_cost: number
+  purchase_id: string | null
+  notes: string
+  occurred_at: string
+  created_by: string | null
+  created_at: string
+}
+
+export type InventoryMovementView = InventoryMovement & {
+  item_name: string
+  group_id: string
+  group_name: string
+  base_unit: BaseUnit
+  purchase_folio: string | null
+  created_by_name: string | null
+}
+
+export type InventoryStock = {
+  item_id: string
+  name: string
+  group_id: string
+  group_name: string
+  category_name: string | null
+  base_unit: BaseUnit
+  tier: InventoryTier | null
+  kind: InventoryKind
+  purchase_unit: string
+  purchase_factor: number
+  avg_cost: number
+  min_stock_base: number
+  track_stock: boolean
+  active: boolean
+  current_qty_base: number
+  stock_qty_base: number | null
+  stock_value: number
+  stock_status: InventoryStockStatus
+}
+
 export type ProductCost = {
   product_id: string
   name: string
@@ -306,6 +393,24 @@ export type Database = {
         Update: never
         Relationships: []
       }
+      purchases: {
+        Row: Purchase
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      purchase_items: {
+        Row: PurchaseItem
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      inventory_movements: {
+        Row: InventoryMovement
+        Insert: never
+        Update: never
+        Relationships: []
+      }
     }
     Views: {
       v_ice_daily_records: {
@@ -314,6 +419,22 @@ export type Database = {
       }
       v_ice_cost_7d: {
         Row: IceCost7d
+        Relationships: []
+      }
+      v_inventory_stock: {
+        Row: InventoryStock
+        Relationships: []
+      }
+      v_inventory_movements: {
+        Row: InventoryMovementView
+        Relationships: []
+      }
+      v_purchases: {
+        Row: PurchaseView
+        Relationships: []
+      }
+      v_purchase_items: {
+        Row: PurchaseItemView
         Relationships: []
       }
       v_inventory_group_costs: {
@@ -368,6 +489,24 @@ export type Database = {
       delete_ice_daily_record: {
         Args: { p_id: string }
         Returns: undefined
+      }
+      adjust_inventory_item: {
+        Args: {
+          p_item_id: string
+          p_counted_qty_base: number
+          p_notes: string
+        }
+        Returns: number
+      }
+      create_purchase: {
+        Args: {
+          p_purchase_date: string
+          p_supplier: string
+          p_invoice_ref: string
+          p_notes: string
+          p_items: Json
+        }
+        Returns: string
       }
       update_my_profile: {
         Args: { p_full_name: string }

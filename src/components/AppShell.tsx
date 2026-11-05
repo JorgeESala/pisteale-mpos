@@ -5,7 +5,7 @@ import { useAuth } from '@/features/auth/auth-context'
 const navItems = [
   { label: 'Inicio', href: '/', enabled: true },
   { label: 'Pedidos', href: '/pedidos', enabled: false },
-  { label: 'Inventario', href: '/inventario', enabled: false },
+  { label: 'Inventario', href: '/insumos/stock', enabled: true },
   { label: 'Eventos', href: '/eventos', enabled: false },
   { label: 'Más', href: '/mas', enabled: false },
 ]

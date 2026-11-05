@@ -1,0 +1,36 @@
+import { z } from 'zod'
+
+export const purchaseItemFormSchema = z.object({
+  itemId: z.string().uuid('Selecciona un insumo'),
+  qtyPurchase: z.number().positive('Cantidad inválida'),
+  totalCost: z.number().min(0, 'Costo inválido'),
+})
+
+export const purchaseFormSchema = z
+  .object({
+    purchaseDate: z.string().min(1, 'La fecha es obligatoria'),
+    supplier: z.string().max(120, 'Máximo 120 caracteres'),
+    invoiceRef: z.string().max(60, 'Máximo 60 caracteres'),
+    notes: z.string().max(1000, 'Máximo 1000 caracteres'),
+    items: z.array(purchaseItemFormSchema).min(1, 'Agrega al menos un insumo'),
+  })
+  .superRefine((data, ctx) => {
+    const itemIds = data.items.map((item) => item.itemId).filter(Boolean)
+
+    if (new Set(itemIds).size !== itemIds.length) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'No repitas el mismo insumo',
+        path: ['items'],
+      })
+    }
+  })
+
+export type PurchaseForm = z.infer<typeof purchaseFormSchema>
+
+export const inventoryAdjustmentFormSchema = z.object({
+  countedQty: z.number().min(0, 'El conteo no puede ser negativo'),
+  notes: z.string().max(1000, 'Máximo 1000 caracteres'),
+})
+
+export type InventoryAdjustmentForm = z.infer<typeof inventoryAdjustmentFormSchema>

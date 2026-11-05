@@ -32,6 +32,24 @@ export function InventoryItemsPage() {
         </div>
         <div className="flex flex-wrap justify-end gap-2">
           <Link
+            to="/insumos/stock"
+            className="rounded-xl border border-neutral-700 px-3 py-2 text-sm text-neutral-300 transition hover:border-neutral-500"
+          >
+            Stock
+          </Link>
+          <Link
+            to="/insumos/compras"
+            className="rounded-xl border border-neutral-700 px-3 py-2 text-sm text-neutral-300 transition hover:border-neutral-500"
+          >
+            Compras
+          </Link>
+          <Link
+            to="/insumos/movimientos"
+            className="rounded-xl border border-neutral-700 px-3 py-2 text-sm text-neutral-300 transition hover:border-neutral-500"
+          >
+            Movimientos
+          </Link>
+          <Link
             to="/catalogo"
             className="rounded-xl border border-neutral-700 px-3 py-2 text-sm text-neutral-300 transition hover:border-neutral-500"
           >

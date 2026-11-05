@@ -132,6 +132,24 @@ export function DashboardPage() {
             Insumos
           </Link>
           <Link
+            to="/insumos/stock"
+            className="rounded-xl border border-neutral-700 px-3 py-3 text-center text-neutral-200 transition hover:border-neutral-500"
+          >
+            Stock
+          </Link>
+          <Link
+            to="/insumos/compras"
+            className="rounded-xl border border-neutral-700 px-3 py-3 text-center text-neutral-200 transition hover:border-neutral-500"
+          >
+            Compras
+          </Link>
+          <Link
+            to="/insumos/movimientos"
+            className="rounded-xl border border-neutral-700 px-3 py-3 text-center text-neutral-200 transition hover:border-neutral-500"
+          >
+            Movimientos
+          </Link>
+          <Link
             to="/insumos/grupos"
             className="rounded-xl border border-neutral-700 px-3 py-3 text-center text-neutral-200 transition hover:border-neutral-500"
           >
