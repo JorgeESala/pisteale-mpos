@@ -4,6 +4,10 @@ import { AppShell } from '@/components/AppShell'
 import { AuthProvider } from '@/features/auth/AuthProvider'
 import { LoginPage } from '@/features/auth/LoginPage'
 import { ProtectedRoute } from '@/features/auth/ProtectedRoute'
+import { CatalogPage } from '@/features/catalog/CatalogPage'
+import { InventoryItemFormPage } from '@/features/catalog/InventoryItemFormPage'
+import { InventoryItemsPage } from '@/features/catalog/InventoryItemsPage'
+import { ProductFormPage } from '@/features/catalog/ProductFormPage'
 import { DashboardPage } from '@/features/dashboard/DashboardPage'
 import { ProfilePage } from '@/features/profile/ProfilePage'
 import { queryClient } from '@/lib/queryClient'
@@ -31,6 +35,46 @@ export default function App() {
                 <ProtectedRoute>
                   <AppShell>
                     <ProfilePage />
+                  </AppShell>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/catalogo"
+              element={
+                <ProtectedRoute>
+                  <AppShell>
+                    <CatalogPage />
+                  </AppShell>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/catalogo/:id"
+              element={
+                <ProtectedRoute>
+                  <AppShell>
+                    <ProductFormPage />
+                  </AppShell>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/insumos"
+              element={
+                <ProtectedRoute>
+                  <AppShell>
+                    <InventoryItemsPage />
+                  </AppShell>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/insumos/:id"
+              element={
+                <ProtectedRoute>
+                  <AppShell>
+                    <InventoryItemFormPage />
                   </AppShell>
                 </ProtectedRoute>
               }

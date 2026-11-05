@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select extensions.plan(31);
+select extensions.plan(44);
 
 delete from auth.users
 where id in (
@@ -411,6 +411,214 @@ select extensions.throws_ok(
   'P0001',
   'Perfil no encontrado',
   'admin cannot update a missing profile'
+);
+
+reset role;
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claim.sub',
+  '11111111-1111-1111-1111-111111111111',
+  true
+);
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"11111111-1111-1111-1111-111111111111","role":"authenticated"}',
+  true
+);
+
+select extensions.is(
+  (
+    select (public.upsert_inventory_item(
+      '44444444-4444-4444-4444-444444444444'::uuid,
+      'Test Ingrediente A',
+      (select id from public.inventory_categories where name = 'Destilados'),
+      'ingrediente',
+      'ml',
+      'botella',
+      750,
+      0.1,
+      0,
+      true,
+      true
+    )).name
+  ),
+  'Test Ingrediente A',
+  'admin creates inventory item'
+);
+
+select extensions.is(
+  (
+    select (public.upsert_inventory_item(
+      '55555555-5555-5555-5555-555555555555'::uuid,
+      'Test Ingrediente B',
+      (select id from public.inventory_categories where name = 'Frutas y hierbas'),
+      'ingrediente',
+      'g',
+      'kg',
+      1000,
+      0.05,
+      0,
+      true,
+      true
+    )).name
+  ),
+  'Test Ingrediente B',
+  'admin creates second inventory item'
+);
+
+select extensions.is(
+  (
+    select (public.upsert_product(
+      '66666666-6666-6666-6666-666666666666'::uuid,
+      'Test Cocktail',
+      '',
+      (select id from public.product_categories where name = 'Ron'),
+      'preparado',
+      120,
+      true,
+      1000,
+      null,
+      true,
+      ''
+    )).name
+  ),
+  'Test Cocktail',
+  'admin creates product'
+);
+
+reset role;
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claim.sub',
+  '22222222-2222-2222-2222-222222222222',
+  true
+);
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"22222222-2222-2222-2222-222222222222","role":"authenticated"}',
+  true
+);
+
+select extensions.throws_ok(
+  $sql$select public.upsert_product('77777777-7777-7777-7777-777777777777'::uuid, 'Hack', '', null, 'preparado', 120, true, 1000, null, true, '')$sql$,
+  '42501',
+  'No autorizado',
+  'operator cannot create product'
+);
+
+select extensions.throws_ok(
+  $sql$select public.upsert_inventory_item('88888888-8888-8888-8888-888888888888'::uuid, 'Hack', null, 'ingrediente', 'ml', 'botella', 750, 0, 0, true, true)$sql$,
+  '42501',
+  'No autorizado',
+  'operator cannot create inventory item'
+);
+
+reset role;
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claim.sub',
+  '11111111-1111-1111-1111-111111111111',
+  true
+);
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"11111111-1111-1111-1111-111111111111","role":"authenticated"}',
+  true
+);
+
+select extensions.is(
+  (
+    select (public.upsert_recipe(
+      '66666666-6666-6666-6666-666666666666'::uuid,
+      1,
+      'porcion',
+      '',
+      '[{"inventory_item_id":"44444444-4444-4444-4444-444444444444","qty_base":100},{"inventory_item_id":"55555555-5555-5555-5555-555555555555","qty_base":50}]'::jsonb
+    )).product_id
+  ),
+  '66666666-6666-6666-6666-666666666666'::uuid,
+  'admin saves recipe'
+);
+
+select extensions.throws_ok(
+  $sql$select public.upsert_recipe('66666666-6666-6666-6666-666666666666'::uuid, 1, 'porcion', '', '[{"inventory_item_id":"44444444-4444-4444-4444-444444444444","qty_base":0}]'::jsonb)$sql$,
+  '22023',
+  'Cantidad inválida en la receta',
+  'recipe rejects zero quantity'
+);
+
+select extensions.throws_ok(
+  $sql$select public.upsert_recipe('66666666-6666-6666-6666-666666666666'::uuid, 1, 'porcion', '', '[{"inventory_item_id":"44444444-4444-4444-4444-444444444444","qty_base":10},{"inventory_item_id":"44444444-4444-4444-4444-444444444444","qty_base":20}]'::jsonb)$sql$,
+  '22023',
+  'Insumo duplicado en la receta',
+  'recipe rejects duplicate items'
+);
+
+select extensions.is(
+  (select estimated_cost from public.v_product_costs where product_id = '66666666-6666-6666-6666-666666666666'),
+  12.50::numeric,
+  'product cost is calculated'
+);
+
+select extensions.is(
+  (select estimated_margin from public.v_product_costs where product_id = '66666666-6666-6666-6666-666666666666'),
+  107.50::numeric,
+  'product margin is calculated'
+);
+
+select public.upsert_product(
+  '99999999-9999-9999-9999-999999999999'::uuid,
+  'Test Sin Receta',
+  '',
+  null,
+  'preparado',
+  120,
+  true,
+  1000,
+  null,
+  true,
+  ''
+);
+
+select extensions.is(
+  (select has_recipe from public.v_product_costs where product_id = '99999999-9999-9999-9999-999999999999'),
+  false,
+  'product without recipe is pending'
+);
+
+reset role;
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claim.sub',
+  '22222222-2222-2222-2222-222222222222',
+  true
+);
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"22222222-2222-2222-2222-222222222222","role":"authenticated"}',
+  true
+);
+
+select extensions.ok(
+  (select count(*) from public.products) > 0,
+  'operator can read catalog'
+);
+
+reset role;
+
+set local role anon;
+select set_config('request.jwt.claim.sub', '', true);
+select set_config('request.jwt.claims', '{"role":"anon"}', true);
+
+select extensions.throws_ok(
+  $sql$select count(*) from public.products$sql$,
+  '42501',
+  'permission denied for table products',
+  'anon cannot read catalog'
 );
 
 reset role;

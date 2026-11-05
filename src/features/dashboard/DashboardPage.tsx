@@ -117,14 +117,27 @@ export function DashboardPage() {
       </section>
 
       <section className="rounded-2xl border border-neutral-800 bg-neutral-900 p-4">
-        <h2 className="font-semibold">Fase 0</h2>
-        <ul className="mt-3 space-y-2 text-sm text-neutral-400">
-          <li>Autenticación y perfiles</li>
-          <li>RLS de lectura y escritura por RPC</li>
-          <li>Auditoría de cambios de perfil</li>
-          <li>Configuración del negocio</li>
-          <li>Respaldos y keep-alive</li>
-        </ul>
+        <h2 className="font-semibold">Administración</h2>
+        <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+          <Link
+            to="/catalogo"
+            className="rounded-xl border border-neutral-700 px-3 py-3 text-center text-neutral-200 transition hover:border-neutral-500"
+          >
+            Catálogo
+          </Link>
+          <Link
+            to="/insumos"
+            className="rounded-xl border border-neutral-700 px-3 py-3 text-center text-neutral-200 transition hover:border-neutral-500"
+          >
+            Insumos
+          </Link>
+          <Link
+            to="/perfil"
+            className="rounded-xl border border-neutral-700 px-3 py-3 text-center text-neutral-200 transition hover:border-neutral-500"
+          >
+            Mi perfil
+          </Link>
+        </div>
       </section>
     </div>
   )
