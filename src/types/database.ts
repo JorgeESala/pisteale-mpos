@@ -220,7 +220,7 @@ export type IceCost7d = {
 export type InventoryMovementType =
   'purchase' | 'adjustment' | 'opening' | 'consumption' | 'waste' | 'transfer'
 
-export type InventoryStockStatus = 'ok' | 'low' | 'out' | 'no_stock'
+export type InventoryStockStatus = 'ok' | 'low' | 'out' | 'negative' | 'no_stock'
 
 export type Purchase = {
   id: string
@@ -269,6 +269,8 @@ export type InventoryMovement = {
   total_cost: number
   purchase_id: string | null
   bottle_opening_id: string | null
+  order_id: string | null
+  order_item_id: string | null
   notes: string
   occurred_at: string
   created_by: string | null
@@ -281,6 +283,7 @@ export type InventoryMovementView = InventoryMovement & {
   group_name: string
   base_unit: BaseUnit
   purchase_folio: string | null
+  order_folio: string | null
   created_by_name: string | null
 }
 
@@ -376,6 +379,112 @@ export type BottleStock = {
   sealed_ml: number
   open_count: number
   open_value: number
+}
+
+export type OrderStatus = 'paid' | 'cancelled'
+export type OrderTier = 'normal' | 'premium'
+export type PaymentMethod = 'cash' | 'card' | 'transfer' | 'other'
+
+export type SaleProduct = {
+  id: string
+  name: string
+  price: number
+  premium_price: number | null
+  is_alcoholic: boolean
+}
+
+export type Order = {
+  id: string
+  folio: string
+  sold_at: string
+  status: OrderStatus
+  subtotal: number
+  tip_total: number
+  total: number
+  cost_total: number | null
+  inventory_warnings: Json
+  notes: string
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type OrderView = Order & {
+  sale_date: string
+  margin: number | null
+  item_count: number
+  payment_methods: string | null
+  payment_total: number
+  warning_count: number
+  created_by_name: string | null
+}
+
+export type OrderItem = {
+  id: string
+  order_id: string
+  product_id: string
+  product_name: string
+  tier: OrderTier
+  quantity: number
+  unit_price: number
+  line_total: number
+  unit_cost: number | null
+  line_cost: number | null
+  notes: string
+  created_at: string
+}
+
+export type OrderItemView = OrderItem & {
+  folio: string
+  sold_at: string
+  sale_date: string
+}
+
+export type Payment = {
+  id: string
+  order_id: string
+  method: PaymentMethod
+  amount: number
+  tip_amount: number
+  reference: string
+  paid_at: string
+  created_by: string | null
+  created_at: string
+}
+
+export type PaymentView = Payment & {
+  folio: string
+  created_by_name: string | null
+}
+
+export type SaleStockWarning = {
+  type: 'stock'
+  scope: 'recipe' | 'consumable'
+  group_id: string
+  group_name: string
+  required_base: number
+  available_base: number
+  missing_base: number
+  base_unit: BaseUnit
+  role?: 'cup' | 'lid' | 'straw'
+}
+
+export type SaleNoRecipeWarning = {
+  type: 'no_recipe'
+  product_id: string
+  product_name: string
+}
+
+export type SaleCostPendingWarning = {
+  type: 'cost_pending'
+  product_id: string
+  product_name: string
+}
+
+export type SaleWarning = SaleStockWarning | SaleNoRecipeWarning | SaleCostPendingWarning
+
+export type SalePreview = {
+  warnings: SaleWarning[]
 }
 
 export type ProductCost = {
@@ -510,6 +619,24 @@ export type Database = {
         Update: never
         Relationships: []
       }
+      orders: {
+        Row: Order
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      order_items: {
+        Row: OrderItem
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      payments: {
+        Row: Payment
+        Insert: never
+        Update: never
+        Relationships: []
+      }
     }
     Views: {
       v_ice_daily_records: {
@@ -546,6 +673,18 @@ export type Database = {
       }
       v_bottle_stock: {
         Row: BottleStock
+        Relationships: []
+      }
+      v_orders: {
+        Row: OrderView
+        Relationships: []
+      }
+      v_order_items: {
+        Row: OrderItemView
+        Relationships: []
+      }
+      v_payments: {
+        Row: PaymentView
         Relationships: []
       }
       v_inventory_group_costs: {
@@ -653,6 +792,20 @@ export type Database = {
           p_notes: string
         }
         Returns: undefined
+      }
+      preview_sale: {
+        Args: { p_items: Json }
+        Returns: SalePreview
+      }
+      create_sale: {
+        Args: {
+          p_items: Json
+          p_payment_method: PaymentMethod
+          p_payment_reference: string
+          p_tip: number
+          p_notes: string
+        }
+        Returns: string
       }
       update_my_profile: {
         Args: { p_full_name: string }

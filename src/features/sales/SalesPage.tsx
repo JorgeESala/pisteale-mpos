@@ -1,0 +1,491 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { formatCurrency } from '@/lib/format'
+import type { OrderTier, PaymentMethod, SaleWarning } from '@/types/database'
+import { formatDateTime } from '@/features/inventory/inventory-utils'
+import {
+  addSaleLine,
+  canSellPremium,
+  type SaleCartLine,
+  saleLineTotal,
+  saleSubtotal,
+} from './sales-cart'
+import { createSale, fetchOrders, fetchSaleProducts, previewSale } from './queries'
+import { warningText } from './sales-warnings'
+
+const paymentMethodLabels: Record<PaymentMethod, string> = {
+  cash: 'Efectivo',
+  card: 'Tarjeta',
+  transfer: 'Transferencia',
+  other: 'Otro',
+}
+
+const tierLabels: Record<OrderTier, string> = {
+  normal: 'Normal',
+  premium: 'Premium',
+}
+
+export function SalesPage() {
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
+
+  const productsQuery = useQuery({
+    queryKey: ['sale_products'],
+    queryFn: fetchSaleProducts,
+  })
+
+  const ordersQuery = useQuery({
+    queryKey: ['orders'],
+    queryFn: () => fetchOrders(20),
+  })
+
+  const [cart, setCart] = useState<SaleCartLine[]>([])
+  const [selectedProductId, setSelectedProductId] = useState('')
+  const [selectedTier, setSelectedTier] = useState<OrderTier>('normal')
+  const [qty, setQty] = useState(1)
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash')
+  const [reference, setReference] = useState('')
+  const [tip, setTip] = useState(0)
+  const [notes, setNotes] = useState('')
+  const [warnings, setWarnings] = useState<SaleWarning[]>([])
+  const [showWarnings, setShowWarnings] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const products = productsQuery.data ?? []
+  const selectedProduct = products.find((product) => product.id === selectedProductId)
+  const subtotal = saleSubtotal(cart)
+  const total = Math.round((subtotal + tip) * 100) / 100
+
+  const previewMutation = useMutation({
+    mutationFn: () =>
+      previewSale(
+        cart.map((line) => ({
+          productId: line.productId,
+          tier: line.tier,
+          qty: line.qty,
+        })),
+      ),
+    onSuccess: (result) => {
+      if (result.length > 0) {
+        setWarnings(result)
+        setShowWarnings(true)
+      } else {
+        void completeSale()
+      }
+    },
+    onError: (mutationError) => setError(mutationError.message),
+  })
+
+  const createMutation = useMutation({
+    mutationFn: () =>
+      createSale({
+        items: cart.map((line) => ({
+          productId: line.productId,
+          tier: line.tier,
+          qty: line.qty,
+        })),
+        paymentMethod,
+        reference,
+        tip,
+        notes,
+      }),
+    onSuccess: (orderId) => {
+      void queryClient.invalidateQueries({ queryKey: ['orders'] })
+      void queryClient.invalidateQueries({ queryKey: ['inventory_stock'] })
+      void queryClient.invalidateQueries({ queryKey: ['inventory_stock_item'] })
+      void queryClient.invalidateQueries({ queryKey: ['inventory_movements'] })
+      void queryClient.invalidateQueries({ queryKey: ['bottle_stock'] })
+      void queryClient.invalidateQueries({ queryKey: ['bottle_openings'] })
+      void queryClient.invalidateQueries({ queryKey: ['bottle_opening'] })
+      void queryClient.invalidateQueries({ queryKey: ['bottle_movements'] })
+      setCart([])
+      setWarnings([])
+      setShowWarnings(false)
+      setTip(0)
+      setReference('')
+      setNotes('')
+      navigate(`/pedidos/${orderId}`)
+    },
+    onError: (mutationError) => setError(mutationError.message),
+  })
+
+  function handleProductChange(productId: string) {
+    setSelectedProductId(productId)
+    const product = products.find((candidate) => candidate.id === productId)
+    if (!product || !canSellPremium(product)) {
+      setSelectedTier('normal')
+    }
+  }
+
+  function addLine() {
+    setError(null)
+    if (!selectedProduct) {
+      setError('Selecciona un producto.')
+      return
+    }
+
+    if (!Number.isInteger(qty) || qty < 1) {
+      setError('La cantidad debe ser un entero mayor a cero.')
+      return
+    }
+
+    setCart((current) => addSaleLine(current, selectedProduct, selectedTier, qty))
+    setSelectedProductId('')
+    setSelectedTier('normal')
+    setQty(1)
+  }
+
+  function removeLine(index: number) {
+    setCart((current) => current.filter((_, lineIndex) => lineIndex !== index))
+  }
+
+  async function completeSale() {
+    setError(null)
+    await createMutation.mutateAsync()
+  }
+
+  function handleCheckout() {
+    setError(null)
+    if (cart.length === 0) {
+      setError('Agrega al menos un producto.')
+      return
+    }
+
+    if (!Number.isFinite(tip) || tip < 0) {
+      setError('La propina no puede ser negativa.')
+      return
+    }
+
+    previewMutation.mutate()
+  }
+
+  if (productsQuery.isLoading || ordersQuery.isLoading) {
+    return <p className="text-sm text-neutral-500">Cargando ventas…</p>
+  }
+
+  if (productsQuery.isError || ordersQuery.isError) {
+    const queryError = productsQuery.error ?? ordersQuery.error
+    return (
+      <p className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+        {queryError?.message}
+      </p>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      <section className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm text-neutral-400">PISTEALE</p>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight">Pedidos</h1>
+        </div>
+        <div className="flex flex-wrap justify-end gap-2">
+          <Link
+            to="/insumos/stock"
+            className="rounded-xl border border-neutral-700 px-3 py-2 text-sm text-neutral-300 transition hover:border-neutral-500"
+          >
+            Stock
+          </Link>
+          <Link
+            to="/reportes"
+            className="rounded-xl border border-neutral-700 px-3 py-2 text-sm text-neutral-300 transition hover:border-neutral-500"
+          >
+            Reportes
+          </Link>
+        </div>
+      </section>
+
+      <section className="space-y-4 rounded-2xl border border-neutral-800 bg-neutral-900 p-4">
+        <div>
+          <h2 className="font-semibold">Nueva venta</h2>
+          <p className="mt-1 text-sm text-neutral-400">
+            La venta no se bloquea por falta de stock; se muestra una advertencia antes de cobrar.
+          </p>
+        </div>
+
+        <div>
+          <label htmlFor="saleProduct" className="mb-1.5 block text-sm text-neutral-300">
+            Producto
+          </label>
+          <select
+            id="saleProduct"
+            value={selectedProductId}
+            onChange={(event) => handleProductChange(event.target.value)}
+            className="w-full rounded-xl border border-neutral-700 bg-neutral-950 px-3 py-3 text-base text-neutral-100 outline-none transition focus:border-brand-400"
+          >
+            <option value="">Selecciona un producto</option>
+            {products.map((product) => (
+              <option key={product.id} value={product.id}>
+                {product.name} · {formatCurrency(product.price)}
+                {product.premium_price !== null
+                  ? ` / ${formatCurrency(product.premium_price)} premium`
+                  : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label htmlFor="saleTier" className="mb-1.5 block text-sm text-neutral-300">
+              Tier
+            </label>
+            <select
+              id="saleTier"
+              value={selectedTier}
+              disabled={!selectedProduct || !canSellPremium(selectedProduct)}
+              onChange={(event) => setSelectedTier(event.target.value as OrderTier)}
+              className="w-full rounded-xl border border-neutral-700 bg-neutral-950 px-3 py-3 text-base text-neutral-100 outline-none transition focus:border-brand-400 disabled:opacity-60"
+            >
+              <option value="normal">Normal</option>
+              <option value="premium">Premium</option>
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="saleQty" className="mb-1.5 block text-sm text-neutral-300">
+              Cantidad
+            </label>
+            <input
+              id="saleQty"
+              type="number"
+              min="1"
+              step="1"
+              value={qty}
+              onChange={(event) => setQty(Number(event.target.value))}
+              className="w-full rounded-xl border border-neutral-700 bg-neutral-950 px-4 py-3 text-base text-neutral-100 outline-none transition focus:border-brand-400"
+            />
+          </div>
+        </div>
+
+        {selectedProduct ? (
+          <p className="text-xs text-neutral-500">
+            Precio por bebida:{' '}
+            {formatCurrency(
+              selectedTier === 'premium' && selectedProduct.premium_price !== null
+                ? selectedProduct.premium_price
+                : selectedProduct.price,
+            )}
+          </p>
+        ) : null}
+
+        <button
+          type="button"
+          onClick={addLine}
+          className="w-full rounded-xl border border-neutral-700 px-4 py-3 text-sm font-medium text-neutral-200 transition hover:border-neutral-500"
+        >
+          Agregar al pedido
+        </button>
+      </section>
+
+      <section className="space-y-3 rounded-2xl border border-neutral-800 bg-neutral-900 p-4">
+        <div className="flex items-end justify-between gap-3">
+          <h2 className="font-semibold">Carrito</h2>
+          <p className="text-xs text-neutral-500">
+            {cart.length} {cart.length === 1 ? 'línea' : 'líneas'}
+          </p>
+        </div>
+
+        {cart.length === 0 ? (
+          <p className="text-sm text-neutral-500">El carrito está vacío.</p>
+        ) : null}
+
+        {cart.map((line, index) => (
+          <div
+            key={`${line.productId}-${line.tier}`}
+            className="flex items-center justify-between gap-3 rounded-xl border border-neutral-800 bg-neutral-950 p-3"
+          >
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium">{line.productName}</p>
+              <p className="text-xs text-neutral-500">
+                {tierLabels[line.tier]} · {line.qty} × {formatCurrency(line.unitPrice)}
+              </p>
+            </div>
+            <div className="flex shrink-0 items-center gap-3">
+              <p className="text-sm font-semibold">{formatCurrency(saleLineTotal(line))}</p>
+              <button
+                type="button"
+                onClick={() => removeLine(index)}
+                className="rounded-lg border border-red-500/40 px-2 py-1 text-xs text-red-300"
+              >
+                Quitar
+              </button>
+            </div>
+          </div>
+        ))}
+
+        <div className="space-y-2 border-t border-neutral-800 pt-3 text-sm">
+          <div className="flex justify-between gap-3 text-neutral-400">
+            <span>Subtotal</span>
+            <span>{formatCurrency(subtotal)}</span>
+          </div>
+          <div className="flex items-center justify-between gap-3 text-neutral-400">
+            <label htmlFor="saleTip">Propina</label>
+            <input
+              id="saleTip"
+              type="number"
+              min="0"
+              step="0.01"
+              value={tip}
+              onChange={(event) => setTip(Number(event.target.value) || 0)}
+              className="w-28 rounded-lg border border-neutral-700 bg-neutral-950 px-2 py-1.5 text-right text-sm text-neutral-100 outline-none focus:border-brand-400"
+            />
+          </div>
+          <div className="flex justify-between gap-3 text-base font-semibold">
+            <span>Total</span>
+            <span>{formatCurrency(total)}</span>
+          </div>
+        </div>
+      </section>
+
+      <section className="space-y-4 rounded-2xl border border-neutral-800 bg-neutral-900 p-4">
+        <h2 className="font-semibold">Cobro</h2>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label htmlFor="paymentMethod" className="mb-1.5 block text-sm text-neutral-300">
+              Método de pago
+            </label>
+            <select
+              id="paymentMethod"
+              value={paymentMethod}
+              onChange={(event) => setPaymentMethod(event.target.value as PaymentMethod)}
+              className="w-full rounded-xl border border-neutral-700 bg-neutral-950 px-3 py-3 text-base text-neutral-100 outline-none transition focus:border-brand-400"
+            >
+              {Object.entries(paymentMethodLabels).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="paymentReference" className="mb-1.5 block text-sm text-neutral-300">
+              Referencia
+            </label>
+            <input
+              id="paymentReference"
+              type="text"
+              placeholder="Opcional"
+              value={reference}
+              onChange={(event) => setReference(event.target.value)}
+              className="w-full rounded-xl border border-neutral-700 bg-neutral-950 px-4 py-3 text-base text-neutral-100 outline-none transition focus:border-brand-400"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label htmlFor="saleNotes" className="mb-1.5 block text-sm text-neutral-300">
+            Notas
+          </label>
+          <textarea
+            id="saleNotes"
+            rows={2}
+            placeholder="Opcional"
+            value={notes}
+            onChange={(event) => setNotes(event.target.value)}
+            className="w-full rounded-xl border border-neutral-700 bg-neutral-950 px-4 py-3 text-base text-neutral-100 outline-none transition focus:border-brand-400"
+          />
+        </div>
+
+        {error ? (
+          <p className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+            {error}
+          </p>
+        ) : null}
+
+        <button
+          type="button"
+          onClick={handleCheckout}
+          disabled={previewMutation.isPending || createMutation.isPending || cart.length === 0}
+          className="w-full rounded-xl bg-brand-400 px-4 py-3.5 text-base font-semibold text-neutral-950 transition hover:bg-brand-300 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {previewMutation.isPending || createMutation.isPending
+            ? 'Procesando…'
+            : `Cobrar ${formatCurrency(total)}`}
+        </button>
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="font-semibold">Ventas recientes</h2>
+
+        {ordersQuery.data?.length === 0 ? (
+          <p className="rounded-2xl border border-neutral-800 bg-neutral-900 p-4 text-sm text-neutral-500">
+            Aún no hay ventas.
+          </p>
+        ) : null}
+
+        {ordersQuery.data?.map((order) => (
+          <Link
+            key={order.id}
+            to={`/pedidos/${order.id}`}
+            className="block rounded-2xl border border-neutral-800 bg-neutral-900 p-4 transition hover:border-neutral-600"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="font-semibold">{order.folio}</p>
+                <p className="mt-0.5 text-xs text-neutral-500">
+                  {formatDateTime(order.sold_at)} · {order.item_count}{' '}
+                  {order.item_count === 1 ? 'artículo' : 'artículos'}
+                  {order.payment_methods ? ` · ${order.payment_methods}` : ''}
+                </p>
+              </div>
+              <p className="shrink-0 text-sm font-semibold">{formatCurrency(order.total)}</p>
+            </div>
+            {order.warning_count > 0 ? (
+              <span className="mt-2 inline-flex rounded-full bg-amber-500/15 px-2 py-1 text-[11px] text-amber-300">
+                {order.warning_count} advertencia{order.warning_count === 1 ? '' : 's'}
+              </span>
+            ) : null}
+          </Link>
+        ))}
+      </section>
+
+      {showWarnings ? (
+        <div className="fixed inset-0 z-50 flex items-end bg-neutral-950/80 p-4 sm:items-center sm:justify-center">
+          <div className="w-full max-w-md rounded-2xl border border-amber-500/40 bg-neutral-900 p-4 shadow-2xl">
+            <h2 className="font-semibold text-amber-200">Inventario insuficiente</h2>
+            <p className="mt-1 text-sm text-neutral-400">
+              La venta se puede continuar. El inventario faltante quedará negativo.
+            </p>
+
+            <ul className="mt-3 space-y-2 text-sm text-neutral-300">
+              {warnings.map((warning, index) => (
+                <li key={`${warning.type}-${index}`} className="rounded-xl bg-neutral-950 p-3">
+                  {warningText(warning)}
+                </li>
+              ))}
+            </ul>
+
+            {createMutation.isError ? (
+              <p className="mt-3 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+                {createMutation.error.message}
+              </p>
+            ) : null}
+
+            <div className="mt-4 flex gap-2">
+              <button
+                type="button"
+                onClick={() => void completeSale()}
+                disabled={createMutation.isPending}
+                className="flex-1 rounded-xl bg-brand-400 px-3 py-3 text-sm font-semibold text-neutral-950 disabled:opacity-60"
+              >
+                {createMutation.isPending ? 'Cobrando…' : 'Continuar venta'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowWarnings(false)}
+                disabled={createMutation.isPending}
+                className="flex-1 rounded-xl border border-neutral-700 px-3 py-3 text-sm text-neutral-300 disabled:opacity-60"
+              >
+                Revisar carrito
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  )
+}

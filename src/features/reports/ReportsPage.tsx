@@ -8,6 +8,7 @@ import {
   fetchInventoryWaste,
   fetchPurchases,
 } from '@/features/inventory/queries'
+import { fetchOrders, fetchSalesItems } from '@/features/sales/queries'
 import { formatCurrency } from '@/lib/format'
 import { formatDate, wasteReasonLabels } from '@/features/inventory/inventory-utils'
 import type { InventoryWasteReason } from '@/types/database'
@@ -37,6 +38,13 @@ function getRange(period: ReportPeriod) {
   return { from: isoDate(from), to, label: 'Este año' }
 }
 
+const paymentMethodLabels: Record<string, string> = {
+  cash: 'Efectivo',
+  card: 'Tarjeta',
+  transfer: 'Transferencia',
+  other: 'Otro',
+}
+
 const periodOptions: Array<{ value: ReportPeriod; label: string }> = [
   { value: 'month', label: 'Este mes' },
   { value: '30d', label: '30 días' },
@@ -55,6 +63,16 @@ export function ReportsPage() {
   const bottleStockQuery = useQuery({
     queryKey: ['bottle_stock'],
     queryFn: fetchBottleStock,
+  })
+
+  const salesOrdersQuery = useQuery({
+    queryKey: ['orders', 'report', range.from, range.to],
+    queryFn: () => fetchOrders(500, range.from, range.to),
+  })
+
+  const salesItemsQuery = useQuery({
+    queryKey: ['order_items', 'report', range.from, range.to],
+    queryFn: () => fetchSalesItems(range.from, range.to),
   })
 
   const productsQuery = useQuery({
@@ -85,6 +103,8 @@ export function ReportsPage() {
   if (
     stockQuery.isLoading ||
     bottleStockQuery.isLoading ||
+    salesOrdersQuery.isLoading ||
+    salesItemsQuery.isLoading ||
     productsQuery.isLoading ||
     purchasesQuery.isLoading ||
     wasteQuery.isLoading ||
@@ -97,6 +117,8 @@ export function ReportsPage() {
   if (
     stockQuery.isError ||
     bottleStockQuery.isError ||
+    salesOrdersQuery.isError ||
+    salesItemsQuery.isError ||
     productsQuery.isError ||
     purchasesQuery.isError ||
     wasteQuery.isError ||
@@ -106,6 +128,8 @@ export function ReportsPage() {
     const error =
       stockQuery.error ??
       bottleStockQuery.error ??
+      salesOrdersQuery.error ??
+      salesItemsQuery.error ??
       productsQuery.error ??
       purchasesQuery.error ??
       wasteQuery.error ??
@@ -122,17 +146,61 @@ export function ReportsPage() {
   const bottleStock = (bottleStockQuery.data ?? []).filter(
     (item) => item.track_stock && item.base_unit === 'ml',
   )
+  const salesOrders = salesOrdersQuery.data ?? []
+  const salesItems = salesItemsQuery.data ?? []
   const products = productsQuery.data ?? []
   const purchases = purchasesQuery.data ?? []
   const waste = wasteQuery.data ?? []
   const ice = iceQuery.data ?? []
+
+  const salesSubtotal = salesOrders.reduce((sum, order) => sum + order.subtotal, 0)
+  const salesTotal = salesOrders.reduce((sum, order) => sum + order.total, 0)
+  const salesTips = salesOrders.reduce((sum, order) => sum + order.tip_total, 0)
+  const salesCost = salesOrders.reduce((sum, order) => sum + (order.cost_total ?? 0), 0)
+  const salesMargin = salesOrders.reduce((sum, order) => sum + (order.margin ?? 0), 0)
+  const pendingCostOrders = salesOrders.filter((order) => order.cost_total === null).length
+  const warningOrders = salesOrders.filter((order) => order.warning_count > 0).length
+  const averageTicket = salesOrders.length > 0 ? salesSubtotal / salesOrders.length : null
+
+  const salesByProduct = new Map<string, { name: string; qty: number; revenue: number }>()
+  for (const item of salesItems) {
+    const key = `${item.product_id}:${item.tier}`
+    const current = salesByProduct.get(key) ?? { name: '', qty: 0, revenue: 0 }
+    salesByProduct.set(key, {
+      name: `${item.product_name} · ${item.tier === 'premium' ? 'Premium' : 'Normal'}`,
+      qty: current.qty + item.quantity,
+      revenue: current.revenue + item.line_total,
+    })
+  }
+
+  const salesByPaymentMethod = new Map<string, { count: number; total: number }>()
+  for (const order of salesOrders) {
+    const key = order.payment_methods ?? 'Sin pago'
+    const current = salesByPaymentMethod.get(key) ?? { count: 0, total: 0 }
+    salesByPaymentMethod.set(key, {
+      count: current.count + 1,
+      total: current.total + order.total,
+    })
+  }
+
+  const salesByTier = new Map<string, { qty: number; revenue: number }>()
+  for (const item of salesItems) {
+    const key = item.tier === 'premium' ? 'Premium' : 'Normal'
+    const current = salesByTier.get(key) ?? { qty: 0, revenue: 0 }
+    salesByTier.set(key, {
+      qty: current.qty + item.quantity,
+      revenue: current.revenue + item.line_total,
+    })
+  }
 
   const stockValue = stock.reduce((sum, item) => sum + item.stock_value, 0)
   const openBottles = bottleStock.reduce((sum, item) => sum + item.open_count, 0)
   const openMl = bottleStock.reduce((sum, item) => sum + item.open_ml, 0)
   const openValue = bottleStock.reduce((sum, item) => sum + item.open_value, 0)
   const lowStock = stock.filter((item) => item.stock_status === 'low').length
-  const outStock = stock.filter((item) => item.stock_status === 'out').length
+  const outStock = stock.filter(
+    (item) => item.stock_status === 'out' || item.stock_status === 'negative',
+  ).length
   const purchasesTotal = purchases.reduce((sum, purchase) => sum + purchase.total_cost, 0)
   const wasteTotal = waste.reduce((sum, record) => sum + record.total_cost, 0)
   const iceTotal = ice.reduce((sum, record) => sum + record.total_cost, 0)
@@ -235,6 +303,116 @@ export function ReportsPage() {
           </button>
         ))}
       </div>
+
+      <section className="rounded-2xl border border-neutral-800 bg-neutral-900 p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="font-semibold">Ventas del periodo</h2>
+            <p className="mt-1 text-xs text-neutral-500">
+              {salesOrders.length} {salesOrders.length === 1 ? 'ticket' : 'tickets'} ·{' '}
+              {formatCurrency(salesTotal)} cobrados
+            </p>
+          </div>
+          <Link to="/pedidos" className="text-xs text-brand-300 underline">
+            Ir a pedidos
+          </Link>
+        </div>
+
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <div className="rounded-xl border border-neutral-800 bg-neutral-950 p-3">
+            <p className="text-[11px] text-neutral-500">Ventas</p>
+            <p className="mt-1 text-lg font-semibold">{formatCurrency(salesSubtotal)}</p>
+          </div>
+          <div className="rounded-xl border border-neutral-800 bg-neutral-950 p-3">
+            <p className="text-[11px] text-neutral-500">Tickets</p>
+            <p className="mt-1 text-lg font-semibold">{salesOrders.length}</p>
+          </div>
+          <div className="rounded-xl border border-neutral-800 bg-neutral-950 p-3">
+            <p className="text-[11px] text-neutral-500">Ticket promedio</p>
+            <p className="mt-1 text-lg font-semibold">
+              {averageTicket === null ? '—' : formatCurrency(averageTicket)}
+            </p>
+          </div>
+          <div className="rounded-xl border border-neutral-800 bg-neutral-950 p-3">
+            <p className="text-[11px] text-neutral-500">Propinas</p>
+            <p className="mt-1 text-lg font-semibold">{formatCurrency(salesTips)}</p>
+          </div>
+          <div className="rounded-xl border border-neutral-800 bg-neutral-950 p-3">
+            <p className="text-[11px] text-neutral-500">
+              Costo vendido{pendingCostOrders > 0 ? ' (parcial)' : ''}
+            </p>
+            <p className="mt-1 text-lg font-semibold">{formatCurrency(salesCost)}</p>
+          </div>
+          <div className="rounded-xl border border-neutral-800 bg-neutral-950 p-3">
+            <p className="text-[11px] text-neutral-500">
+              Margen bruto{pendingCostOrders > 0 ? ' (parcial)' : ''}
+            </p>
+            <p className="mt-1 text-lg font-semibold">{formatCurrency(salesMargin)}</p>
+          </div>
+        </div>
+
+        <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
+          {warningOrders > 0 ? (
+            <span className="rounded-full bg-amber-500/15 px-2 py-1 text-amber-300">
+              {warningOrders} con advertencia{warningOrders === 1 ? '' : 's'}
+            </span>
+          ) : null}
+          {pendingCostOrders > 0 ? (
+            <span className="rounded-full bg-yellow-500/15 px-2 py-1 text-yellow-300">
+              {pendingCostOrders} con costo pendiente
+            </span>
+          ) : null}
+        </div>
+
+        {salesByProduct.size > 0 ? (
+          <div className="mt-4">
+            <h3 className="text-sm font-medium text-neutral-200">Más vendidos</h3>
+            <div className="mt-2 space-y-2">
+              {[...salesByProduct.values()]
+                .sort((a, b) => b.qty - a.qty)
+                .slice(0, 5)
+                .map((product) => (
+                  <div
+                    key={product.name}
+                    className="flex items-center justify-between gap-3 text-sm"
+                  >
+                    <span className="text-neutral-400">
+                      {product.name} · {product.qty} {product.qty === 1 ? 'bebida' : 'bebidas'}
+                    </span>
+                    <span className="font-medium">{formatCurrency(product.revenue)}</span>
+                  </div>
+                ))}
+            </div>
+          </div>
+        ) : null}
+
+        {salesByPaymentMethod.size > 0 ? (
+          <div className="mt-4">
+            <h3 className="text-sm font-medium text-neutral-200">Por método de pago</h3>
+            <div className="mt-2 space-y-2">
+              {[...salesByPaymentMethod.entries()].map(([method, data]) => (
+                <div key={method} className="flex items-center justify-between gap-3 text-sm">
+                  <span className="text-neutral-400">
+                    {paymentMethodLabels[method] ?? method} · {data.count}{' '}
+                    {data.count === 1 ? 'venta' : 'ventas'}
+                  </span>
+                  <span className="font-medium">{formatCurrency(data.total)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {salesByTier.size > 0 ? (
+          <p className="mt-4 text-xs text-neutral-500">
+            {[...salesByTier.entries()]
+              .map(
+                ([tier, data]) => `${tier}: ${data.qty} bebidas · ${formatCurrency(data.revenue)}`,
+              )
+              .join(' · ')}
+          </p>
+        ) : null}
+      </section>
 
       <section className="grid grid-cols-2 gap-2">
         <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-4">

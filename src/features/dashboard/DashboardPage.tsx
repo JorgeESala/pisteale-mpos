@@ -120,6 +120,12 @@ export function DashboardPage() {
         <h2 className="font-semibold">Administración</h2>
         <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
           <Link
+            to="/pedidos"
+            className="rounded-xl border border-neutral-700 px-3 py-3 text-center text-neutral-200 transition hover:border-neutral-500"
+          >
+            Pedidos
+          </Link>
+          <Link
             to="/catalogo"
             className="rounded-xl border border-neutral-700 px-3 py-3 text-center text-neutral-200 transition hover:border-neutral-500"
           >

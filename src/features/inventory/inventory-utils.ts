@@ -18,6 +18,7 @@ export const stockStatusLabels: Record<InventoryStockStatus, string> = {
   ok: 'Disponible',
   low: 'Bajo',
   out: 'Agotado',
+  negative: 'Negativo',
   no_stock: 'No inventariable',
 }
 

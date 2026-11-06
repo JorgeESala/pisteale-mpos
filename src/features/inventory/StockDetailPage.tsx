@@ -13,6 +13,7 @@ const statusClasses = {
   ok: 'bg-green-500/15 text-green-300',
   low: 'bg-yellow-500/15 text-yellow-300',
   out: 'bg-red-500/15 text-red-300',
+  negative: 'bg-red-500/15 text-red-300',
   no_stock: 'bg-neutral-800 text-neutral-400',
 }
 

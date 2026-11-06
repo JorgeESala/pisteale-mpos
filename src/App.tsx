@@ -23,6 +23,8 @@ import { StockDetailPage } from '@/features/inventory/StockDetailPage'
 import { StockPage } from '@/features/inventory/StockPage'
 import { WastePage } from '@/features/inventory/WastePage'
 import { ReportsPage } from '@/features/reports/ReportsPage'
+import { OrderDetailPage } from '@/features/sales/OrderDetailPage'
+import { SalesPage } from '@/features/sales/SalesPage'
 import { UserFormPage } from '@/features/users/UserFormPage'
 import { UsersPage } from '@/features/users/UsersPage'
 import { ProfilePage } from '@/features/profile/ProfilePage'
@@ -201,6 +203,26 @@ export default function App() {
                 <ProtectedRoute>
                   <AppShell>
                     <PurchaseDetailPage />
+                  </AppShell>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/pedidos"
+              element={
+                <ProtectedRoute>
+                  <AppShell>
+                    <SalesPage />
+                  </AppShell>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/pedidos/:id"
+              element={
+                <ProtectedRoute>
+                  <AppShell>
+                    <OrderDetailPage />
                   </AppShell>
                 </ProtectedRoute>
               }

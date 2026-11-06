@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select extensions.plan(99);
+select extensions.plan(116);
 
 delete from auth.users
 where id in (
@@ -1390,6 +1390,282 @@ select extensions.throws_ok(
   'operator without catalog permission cannot create group'
 );
 
+set local role authenticated;
+select set_config(
+  'request.jwt.claim.sub',
+  '11111111-1111-1111-1111-111111111111',
+  true
+);
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"11111111-1111-1111-1111-111111111111","role":"authenticated"}',
+  true
+);
+
+select public.create_purchase(
+  current_date,
+  'Proveedor ventas',
+  'V-001',
+  '',
+  jsonb_build_array(
+    jsonb_build_object(
+      'item_id', (select id from public.inventory_items where name = 'Test Barman Ron'),
+      'qty_purchase', 1,
+      'total_cost', 375
+    ),
+    jsonb_build_object(
+      'item_id', (select id from public.inventory_items where name = 'Vaso 940 ml'),
+      'qty_purchase', 1,
+      'total_cost', 25
+    ),
+    jsonb_build_object(
+      'item_id', (select id from public.inventory_items where name = 'Tapa 940 ml'),
+      'qty_purchase', 1,
+      'total_cost', 12.5
+    ),
+    jsonb_build_object(
+      'item_id', (select id from public.inventory_items where name = 'Popote'),
+      'qty_purchase', 1,
+      'total_cost', 10
+    )
+  )
+);
+
+reset role;
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claim.sub',
+  '22222222-2222-2222-2222-222222222222',
+  true
+);
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"22222222-2222-2222-2222-222222222222","role":"authenticated"}',
+  true
+);
+
+select extensions.is(
+  jsonb_array_length(
+    (public.preview_sale(
+      jsonb_build_array(
+        jsonb_build_object(
+          'product_id', (select id from public.products where name = 'Test Barman Drink'),
+          'tier', 'normal',
+          'qty', 2
+        )
+      )
+    ))->'warnings'
+  ),
+  0,
+  'sale preview has no warnings'
+);
+
+select extensions.ok(
+  (
+    public.create_sale(
+      jsonb_build_array(
+        jsonb_build_object(
+          'product_id', (select id from public.products where name = 'Test Barman Drink'),
+          'tier', 'normal',
+          'qty', 2
+        )
+      ),
+      'cash',
+      'T-001',
+      10,
+      'Venta de prueba'
+    )
+  ) is not null,
+  'operator creates sale'
+);
+
+select extensions.is(
+  (select total from public.v_orders order by folio desc limit 1),
+  210.00::numeric,
+  'sale total includes tip'
+);
+
+select extensions.is(
+  (select cost_total from public.v_orders order by folio desc limit 1),
+  34.20::numeric,
+  'sale cost is calculated'
+);
+
+select extensions.is(
+  (select amount from public.v_payments order by created_at desc limit 1),
+  210.00::numeric,
+  'payment amount is recorded'
+);
+
+select extensions.is(
+  (
+    select current_qty_base
+    from public.v_inventory_stock
+    where name = 'Test Barman Ron'
+  ),
+  690::numeric,
+  'sale deducts recipe ingredient'
+);
+
+select extensions.is(
+  (
+    select current_qty_base
+    from public.v_inventory_stock
+    where name = 'Vaso 940 ml'
+  ),
+  23::numeric,
+  'sale deducts cup'
+);
+
+select extensions.is(
+  (select warning_count from public.v_orders order by folio desc limit 1),
+  0,
+  'sale without inventory warnings'
+);
+
+select extensions.ok(
+  jsonb_array_length(
+    (public.preview_sale(
+      jsonb_build_array(
+        jsonb_build_object(
+          'product_id', (select id from public.products where name = 'Test Cocktail Premium'),
+          'tier', 'premium',
+          'qty', 1
+        )
+      )
+    ))->'warnings'
+  ) > 0,
+  'premium sale preview warns about stock'
+);
+
+select extensions.ok(
+  (
+    public.create_sale(
+      jsonb_build_array(
+        jsonb_build_object(
+          'product_id', (select id from public.products where name = 'Test Cocktail Premium'),
+          'tier', 'premium',
+          'qty', 1
+        )
+      ),
+      'cash',
+      '',
+      0,
+      'Venta premium sin stock'
+    )
+  ) is not null,
+  'premium sale is allowed with warning'
+);
+
+select extensions.is(
+  (
+    select current_qty_base
+    from public.v_inventory_stock
+    where name = 'Test Ron Premium'
+  ),
+  (-45)::numeric,
+  'premium sale leaves negative stock'
+);
+
+select extensions.ok(
+  (select warning_count from public.v_orders order by folio desc limit 1) > 0,
+  'sale stores inventory warnings'
+);
+
+select extensions.is(
+  (
+    select stock_status
+    from public.v_inventory_stock
+    where name = 'Test Ron Premium'
+  ),
+  'negative',
+  'stock shows negative status'
+);
+
+select extensions.ok(
+  exists (
+    select 1
+    from jsonb_array_elements(
+      (public.preview_sale(
+        jsonb_build_array(
+          jsonb_build_object(
+            'product_id', (select id from public.products where name = 'Test Sin Receta'),
+            'tier', 'normal',
+            'qty', 1
+          )
+        )
+      ))->'warnings'
+    ) as e
+    where e->>'type' = 'no_recipe'
+  ),
+  'sale preview warns about missing recipe'
+);
+
+reset role;
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claim.sub',
+  '11111111-1111-1111-1111-111111111111',
+  true
+);
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"11111111-1111-1111-1111-111111111111","role":"authenticated"}',
+  true
+);
+
+select public.open_bottle(
+  (select id from public.inventory_items where name = 'Test Ron Estándar'),
+  current_date,
+  500,
+  'Botella para venta'
+);
+
+reset role;
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claim.sub',
+  '22222222-2222-2222-2222-222222222222',
+  true
+);
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"22222222-2222-2222-2222-222222222222","role":"authenticated"}',
+  true
+);
+
+select public.create_sale(
+  jsonb_build_array(
+    jsonb_build_object(
+      'product_id', (select id from public.products where name = 'Test Cocktail Premium'),
+      'tier', 'normal',
+      'qty', 1
+    )
+  ),
+  'cash',
+  '',
+  0,
+  'Venta con botella abierta'
+);
+
+select extensions.is(
+  (
+    select remaining_ml
+    from public.bottle_openings
+    where item_id = (select id from public.inventory_items where name = 'Test Ron Estándar')
+      and status = 'open'
+    order by created_at desc
+    limit 1
+  ),
+  455::numeric,
+  'sale consumes from open bottle'
+);
+
+reset role;
+
 reset role;
 
 set local role anon;
@@ -1436,6 +1712,20 @@ select extensions.throws_ok(
   '42501',
   'permission denied for table bottle_openings',
   'anon cannot read bottle openings'
+);
+
+select extensions.throws_ok(
+  $sql$select public.preview_sale('[]'::jsonb)$sql$,
+  '42501',
+  'permission denied for function preview_sale',
+  'anon cannot preview sale'
+);
+
+select extensions.throws_ok(
+  $sql$select public.create_sale('[]'::jsonb, 'cash', '', 0, '')$sql$,
+  '42501',
+  'permission denied for function create_sale',
+  'anon cannot create sale'
 );
 
 reset role;

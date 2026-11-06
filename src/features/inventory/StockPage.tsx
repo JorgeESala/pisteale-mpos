@@ -9,6 +9,7 @@ const statusClasses = {
   ok: 'bg-green-500/15 text-green-300',
   low: 'bg-yellow-500/15 text-yellow-300',
   out: 'bg-red-500/15 text-red-300',
+  negative: 'bg-red-500/15 text-red-300',
   no_stock: 'bg-neutral-800 text-neutral-400',
 }
 
@@ -28,7 +29,9 @@ export function StockPage() {
     return haystack.includes(normalizedSearch)
   })
   const lowCount = stock.filter((item) => item.stock_status === 'low').length
-  const outCount = stock.filter((item) => item.stock_status === 'out').length
+  const outCount = stock.filter(
+    (item) => item.stock_status === 'out' || item.stock_status === 'negative',
+  ).length
   const totalValue = stock.reduce((sum, item) => sum + item.stock_value, 0)
 
   return (
