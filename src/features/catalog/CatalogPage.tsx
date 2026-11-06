@@ -13,7 +13,7 @@ export function CatalogPage() {
     queryFn: fetchProducts,
   })
 
-  const isAdmin = profile?.role === 'admin'
+  const canManageCatalog = profile?.role === 'admin' || profile?.can_manage_catalog === true
   const normalizedSearch = search.trim().toLocaleLowerCase('es-MX')
   const filteredProducts =
     productsQuery.data?.filter((product) => {
@@ -35,7 +35,7 @@ export function CatalogPage() {
           >
             Insumos
           </Link>
-          {isAdmin ? (
+          {canManageCatalog ? (
             <Link
               to="/catalogo/nuevo"
               className="rounded-xl bg-brand-400 px-3 py-2 text-sm font-semibold text-neutral-950 transition hover:bg-brand-300"

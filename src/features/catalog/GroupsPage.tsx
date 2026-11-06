@@ -7,7 +7,7 @@ import { fetchInventoryGroups } from './queries'
 export function GroupsPage() {
   const { profile } = useAuth()
   const [search, setSearch] = useState('')
-  const isAdmin = profile?.role === 'admin'
+  const canManageCatalog = profile?.role === 'admin' || profile?.can_manage_catalog === true
 
   const groupsQuery = useQuery({
     queryKey: ['inventory_groups'],
@@ -35,7 +35,7 @@ export function GroupsPage() {
           >
             Insumos
           </Link>
-          {isAdmin ? (
+          {canManageCatalog ? (
             <Link
               to="/insumos/grupos/nuevo"
               className="rounded-xl bg-brand-400 px-3 py-2 text-sm font-semibold text-neutral-950 transition hover:bg-brand-300"

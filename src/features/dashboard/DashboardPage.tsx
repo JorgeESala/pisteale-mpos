@@ -185,6 +185,14 @@ export function DashboardPage() {
           >
             Hielo del día
           </Link>
+          {profile.role === 'admin' ? (
+            <Link
+              to="/usuarios"
+              className="rounded-xl border border-neutral-700 px-3 py-3 text-center text-neutral-200 transition hover:border-neutral-500"
+            >
+              Usuarios
+            </Link>
+          ) : null}
           <Link
             to="/perfil"
             className="rounded-xl border border-neutral-700 px-3 py-3 text-center text-neutral-200 transition hover:border-neutral-500"

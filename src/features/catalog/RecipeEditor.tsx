@@ -43,7 +43,7 @@ function groupUnitCost(
 export function RecipeEditor({ product }: { product: Product }) {
   const { profile } = useAuth()
   const queryClient = useQueryClient()
-  const isAdmin = profile?.role === 'admin'
+  const canManageCatalog = profile?.role === 'admin' || profile?.can_manage_catalog === true
 
   const groupsQuery = useQuery({
     queryKey: ['inventory_groups'],
@@ -228,7 +228,7 @@ export function RecipeEditor({ product }: { product: Product }) {
   const premiumTotalComplete = premiumComplete && consumablesComplete
   const hasRecipe = (recipeItemsQuery.data?.length ?? 0) > 0 || watchedItems.length > 0
 
-  if (!isAdmin) {
+  if (!canManageCatalog) {
     return null
   }
 

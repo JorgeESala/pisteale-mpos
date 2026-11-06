@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select extensions.plan(89);
+select extensions.plan(99);
 
 delete from auth.users
 where id in (
@@ -161,6 +161,7 @@ select extensions.is(
         'operador'::public.user_role,
         true,
         true,
+        false,
         false
       )
     ).can_view_financials
@@ -170,7 +171,7 @@ select extensions.is(
 );
 
 select extensions.throws_ok(
-  $sql$select public.admin_set_profile('11111111-1111-1111-1111-111111111111'::uuid, 'operador'::public.user_role, true, true, true)$sql$,
+  $sql$select public.admin_set_profile('11111111-1111-1111-1111-111111111111'::uuid, 'operador'::public.user_role, true, true, true, false)$sql$,
   'P0001',
   'No puedes quitarte el rol de administrador',
   'admin cannot remove own admin role'
@@ -230,7 +231,7 @@ select extensions.is(
 );
 
 select extensions.throws_ok(
-  $sql$select public.admin_set_profile('22222222-2222-2222-2222-222222222222'::uuid, 'admin'::public.user_role, true, true, true)$sql$,
+  $sql$select public.admin_set_profile('22222222-2222-2222-2222-222222222222'::uuid, 'admin'::public.user_role, true, true, true, false)$sql$,
   '42501',
   'No autorizado',
   'operator cannot call admin_set_profile'
@@ -1187,6 +1188,206 @@ select extensions.is(
   ),
   0::bigint,
   'admin deletes daily ice'
+);
+
+select extensions.is(
+  (
+    select (
+      public.admin_set_profile(
+        '22222222-2222-2222-2222-222222222222'::uuid,
+        'operador'::public.user_role,
+        true,
+        true,
+        false,
+        true
+      )
+    ).can_manage_catalog
+  ),
+  true,
+  'admin grants catalog permission'
+);
+
+select extensions.is(
+  (
+    select email
+    from public.admin_list_users()
+    where id = '22222222-2222-2222-2222-222222222222'::uuid
+  ),
+  'operator-test@pisteale.local',
+  'admin lists users with email'
+);
+
+reset role;
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claim.sub',
+  '22222222-2222-2222-2222-222222222222',
+  true
+);
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"22222222-2222-2222-2222-222222222222","role":"authenticated"}',
+  true
+);
+
+select extensions.is(
+  (
+    select (
+      public.upsert_inventory_group(
+        null,
+        'Test Barman',
+        (select id from public.inventory_categories where name = 'Destilados'),
+        'ml',
+        false,
+        true
+      )
+    ).name
+  ),
+  'Test Barman',
+  'operator with catalog permission creates group'
+);
+
+select extensions.is(
+  (
+    select (
+      public.upsert_inventory_item(
+        null,
+        (select id from public.inventory_item_groups where name = 'Test Barman'),
+        'Test Barman Ron',
+        null,
+        'ingrediente',
+        'botella',
+        750,
+        0.5,
+        0,
+        true,
+        true
+      )
+    ).name
+  ),
+  'Test Barman Ron',
+  'operator with catalog permission creates item'
+);
+
+select extensions.is(
+  (
+    select (
+      public.upsert_product(
+        null,
+        'Test Barman Drink',
+        '',
+        null,
+        'preparado',
+        100,
+        null,
+        false,
+        940,
+        null,
+        true,
+        ''
+      )
+    ).name
+  ),
+  'Test Barman Drink',
+  'operator with catalog permission creates product'
+);
+
+select extensions.is(
+  (
+    select (
+      public.upsert_recipe(
+        (select id from public.products where name = 'Test Barman Drink'),
+        1,
+        'porcion',
+        '',
+        jsonb_build_array(
+          jsonb_build_object(
+            'inventory_group_id',
+            (select id from public.inventory_item_groups where name = 'Test Barman'),
+            'tier_rule', 'any',
+            'qty', 30,
+            'unit', 'ml'
+          )
+        )
+      )
+    ).product_id
+  ),
+  (select id from public.products where name = 'Test Barman Drink'),
+  'operator with catalog permission saves recipe'
+);
+
+select extensions.throws_ok(
+  $sql$select public.save_recipe_default_consumables('[]'::jsonb, 0.9)$sql$,
+  '42501',
+  'No autorizado',
+  'operator with catalog permission cannot manage automatic consumables'
+);
+
+select extensions.throws_ok(
+  $sql$select * from public.admin_list_users()$sql$,
+  '42501',
+  'No autorizado',
+  'operator cannot list users'
+);
+
+reset role;
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claim.sub',
+  '11111111-1111-1111-1111-111111111111',
+  true
+);
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"11111111-1111-1111-1111-111111111111","role":"authenticated"}',
+  true
+);
+
+select extensions.is(
+  (
+    select (
+      public.admin_set_profile(
+        '22222222-2222-2222-2222-222222222222'::uuid,
+        'operador'::public.user_role,
+        true,
+        true,
+        false,
+        false
+      )
+    ).can_manage_catalog
+  ),
+  false,
+  'admin revokes catalog permission'
+);
+
+reset role;
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claim.sub',
+  '22222222-2222-2222-2222-222222222222',
+  true
+);
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"22222222-2222-2222-2222-222222222222","role":"authenticated"}',
+  true
+);
+
+select extensions.throws_ok(
+  $sql$select public.upsert_inventory_group(
+    null,
+    'Test Barman Denied',
+    (select id from public.inventory_categories where name = 'Destilados'),
+    'ml',
+    false,
+    true
+  )$sql$,
+  '42501',
+  'No autorizado',
+  'operator without catalog permission cannot create group'
 );
 
 reset role;

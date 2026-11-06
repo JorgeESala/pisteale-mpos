@@ -8,7 +8,7 @@ import { fetchInventoryItems } from './queries'
 export function InventoryItemsPage() {
   const { profile } = useAuth()
   const [search, setSearch] = useState('')
-  const isAdmin = profile?.role === 'admin'
+  const canManageCatalog = profile?.role === 'admin' || profile?.can_manage_catalog === true
 
   const itemsQuery = useQuery({
     queryKey: ['inventory_items'],
@@ -85,7 +85,7 @@ export function InventoryItemsPage() {
           >
             Hielo del día
           </Link>
-          {isAdmin ? (
+          {canManageCatalog ? (
             <Link
               to="/insumos/nuevo"
               className="rounded-xl bg-brand-400 px-3 py-2 text-sm font-semibold text-neutral-950 transition hover:bg-brand-300"

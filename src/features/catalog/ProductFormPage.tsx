@@ -16,7 +16,7 @@ export function ProductFormPage() {
   const { profile } = useAuth()
   const isNew = id === 'nuevo'
   const productId = isNew ? undefined : id
-  const isAdmin = profile?.role === 'admin'
+  const canManageCatalog = profile?.role === 'admin' || profile?.can_manage_catalog === true
 
   const productQuery = useQuery({
     queryKey: ['product', productId],
@@ -108,7 +108,7 @@ export function ProductFormPage() {
     await saveMutation.mutateAsync(values)
   }
 
-  if (!isAdmin) {
+  if (!canManageCatalog) {
     return (
       <section className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 text-amber-200">
         <h1 className="font-semibold">Acceso restringido</h1>

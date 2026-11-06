@@ -15,9 +15,22 @@ export type Profile = {
   role: UserRole
   can_view_financials: boolean
   can_adjust_inventory: boolean
+  can_manage_catalog: boolean
   active: boolean
   created_at: string
   updated_at: string
+}
+
+export type AdminUser = {
+  id: string
+  full_name: string
+  email: string | null
+  role: UserRole
+  active: boolean
+  can_view_financials: boolean
+  can_adjust_inventory: boolean
+  can_manage_catalog: boolean
+  created_at: string
 }
 
 export type AppSetting = {
@@ -648,6 +661,21 @@ export type Database = {
       admin_update_profile_name: {
         Args: { p_user_id: string; p_full_name: string }
         Returns: Profile
+      }
+      admin_set_profile: {
+        Args: {
+          p_user_id: string
+          p_role: UserRole
+          p_active: boolean
+          p_can_view_financials: boolean
+          p_can_adjust_inventory: boolean
+          p_can_manage_catalog: boolean
+        }
+        Returns: Profile
+      }
+      admin_list_users: {
+        Args: Record<string, never>
+        Returns: AdminUser[]
       }
       upsert_inventory_group: {
         Args: {

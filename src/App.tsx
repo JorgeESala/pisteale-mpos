@@ -22,6 +22,8 @@ import { StockDetailPage } from '@/features/inventory/StockDetailPage'
 import { StockPage } from '@/features/inventory/StockPage'
 import { WastePage } from '@/features/inventory/WastePage'
 import { ReportsPage } from '@/features/reports/ReportsPage'
+import { UserFormPage } from '@/features/users/UserFormPage'
+import { UsersPage } from '@/features/users/UsersPage'
 import { ProfilePage } from '@/features/profile/ProfilePage'
 import { queryClient } from '@/lib/queryClient'
 
@@ -208,6 +210,26 @@ export default function App() {
                 <ProtectedRoute>
                   <AppShell>
                     <ReportsPage />
+                  </AppShell>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/usuarios"
+              element={
+                <ProtectedRoute>
+                  <AppShell>
+                    <UsersPage />
+                  </AppShell>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/usuarios/:id"
+              element={
+                <ProtectedRoute>
+                  <AppShell>
+                    <UserFormPage />
                   </AppShell>
                 </ProtectedRoute>
               }
