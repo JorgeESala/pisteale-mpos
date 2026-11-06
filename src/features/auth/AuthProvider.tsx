@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
 import type { Profile } from '@/types/database'
@@ -8,6 +8,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
+  const profileRef = useRef<Profile | null>(null)
 
   useEffect(() => {
     let active = true
@@ -24,6 +25,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (active) {
+        profileRef.current = data
         setProfile(data)
         setLoading(false)
       }
@@ -48,12 +50,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       setSession(currentSession)
 
-      if (currentSession?.user) {
-        setLoading(true)
-        void loadProfile(currentSession.user.id)
-      } else {
+      if (!currentSession?.user) {
+        profileRef.current = null
         setProfile(null)
         setLoading(false)
+        return
+      }
+
+      if (event === 'TOKEN_REFRESHED') {
+        if (profileRef.current) return
+
+        setLoading(true)
+        void loadProfile(currentSession.user.id)
+        return
+      }
+
+      if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
+        if (profileRef.current) {
+          void loadProfile(currentSession.user.id)
+          return
+        }
+
+        setLoading(true)
+        void loadProfile(currentSession.user.id)
+        return
+      }
+
+      if (!profileRef.current) {
+        setLoading(true)
+        void loadProfile(currentSession.user.id)
       }
     })
 
@@ -65,6 +90,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function signOut() {
     await supabase.auth.signOut()
+    profileRef.current = null
     setProfile(null)
   }
 
@@ -75,6 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (error) throw error
 
+    profileRef.current = data
     setProfile(data)
     return data
   }

@@ -1,12 +1,14 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useFieldArray, useForm, useWatch } from 'react-hook-form'
 import { Link } from 'react-router-dom'
 import { useAuth } from '@/features/auth/auth-context'
+import { clearFormDraft, formDraftKey, hasMeaningfulDraft, loadFormDraft } from '@/lib/form-drafts'
 import { formatCurrency } from '@/lib/format'
 import { supabase } from '@/lib/supabase'
-import type { InventoryGroupCost, Product } from '@/types/database'
+import { useFormDraft } from '@/lib/use-form-draft'
+import type { InventoryGroupCost, Product, Recipe, RecipeItem } from '@/types/database'
 import { recipeFormSchema, type RecipeForm } from './catalog-schemas'
 import {
   fetchDefaultConsumables,
@@ -17,6 +19,38 @@ import {
   fetchRecipeItems,
 } from './queries'
 import { allowedRecipeUnits, calculateIceGrams, recipeQuantityToBase } from './recipe-units'
+
+const emptyRecipeForm: RecipeForm = {
+  yieldQty: 1,
+  yieldUnit: 'porcion',
+  notes: '',
+  items: [],
+}
+
+function serverRecipeForm(
+  recipe: Recipe | null,
+  items: RecipeItem[],
+  groups: InventoryGroupCost[],
+): RecipeForm {
+  if (!recipe) return emptyRecipeForm
+
+  return {
+    yieldQty: Number(recipe.yield_qty),
+    yieldUnit: recipe.yield_unit,
+    notes: recipe.notes,
+    items: items.map((item) => {
+      const group = groups.find((candidate) => candidate.group_id === item.inventory_group_id)
+      const fallbackUnit = group?.base_unit ?? 'ml'
+
+      return {
+        inventory_group_id: item.inventory_group_id,
+        tier_rule: item.tier_rule,
+        qty: item.input_qty !== null ? Number(item.input_qty) : Number(item.qty_base),
+        unit: item.input_unit ?? fallbackUnit,
+      }
+    }),
+  }
+}
 
 function groupUnitCost(
   group: InventoryGroupCost | undefined,
@@ -82,15 +116,11 @@ export function RecipeEditor({ product }: { product: Product }) {
     handleSubmit,
     reset,
     setValue,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<RecipeForm>({
     resolver: zodResolver(recipeFormSchema),
-    defaultValues: {
-      yieldQty: 1,
-      yieldUnit: 'porcion',
-      notes: '',
-      items: [],
-    },
+    defaultValues: emptyRecipeForm,
   })
 
   const { fields, append, remove } = useFieldArray({
@@ -105,28 +135,75 @@ export function RecipeEditor({ product }: { product: Product }) {
   const defaultGroupIds = new Set(defaults.map((item) => item.group_id))
   const groups = (groupsQuery.data ?? []).filter((group) => !defaultGroupIds.has(group.group_id))
 
+  const storageKey = profile?.id ? formDraftKey('recipe', profile.id, product.id) : null
+  const initializedKeyRef = useRef<string | null>(null)
+  const readyRef = useRef(false)
+  const [draftRestored, setDraftRestored] = useState(false)
+
   useEffect(() => {
-    const recipe = recipeQuery.data
-    const groupData = groupsQuery.data
-    if (!recipe || !groupData) return
+    readyRef.current = false
+    if (!canManageCatalog || !groupsQuery.isSuccess || !recipeQuery.isSuccess || !storageKey) return
+    if (recipeQuery.data && !recipeItemsQuery.isSuccess) return
+    if (initializedKeyRef.current === storageKey) {
+      readyRef.current = true
+      return
+    }
 
-    reset({
-      yieldQty: Number(recipe.yield_qty),
-      yieldUnit: recipe.yield_unit,
-      notes: recipe.notes,
-      items: (recipeItemsQuery.data ?? []).map((item) => {
-        const group = groupData.find((candidate) => candidate.group_id === item.inventory_group_id)
-        const fallbackUnit = group?.base_unit ?? 'ml'
-
-        return {
-          inventory_group_id: item.inventory_group_id,
-          tier_rule: item.tier_rule,
-          qty: item.input_qty !== null ? Number(item.input_qty) : Number(item.qty_base),
-          unit: item.input_unit ?? fallbackUnit,
+    initializedKeyRef.current = storageKey
+    const serverValues = serverRecipeForm(
+      recipeQuery.data,
+      recipeItemsQuery.data ?? [],
+      groupsQuery.data ?? [],
+    )
+    const draft = loadFormDraft<Partial<RecipeForm>>(storageKey)
+    const candidate = draft
+      ? {
+          ...serverValues,
+          ...draft,
+          items: Array.isArray(draft.items) ? draft.items : serverValues.items,
         }
-      }),
-    })
-  }, [recipeQuery.data, recipeItemsQuery.data, groupsQuery.data, reset])
+      : serverValues
+    const restored = Boolean(draft && hasMeaningfulDraft(candidate, serverValues))
+
+    if (restored) {
+      reset(candidate as RecipeForm)
+    } else {
+      if (draft) clearFormDraft(storageKey)
+      reset(serverValues)
+    }
+
+    readyRef.current = true
+    queueMicrotask(() => setDraftRestored(restored))
+  }, [
+    canManageCatalog,
+    groupsQuery.data,
+    groupsQuery.isSuccess,
+    recipeItemsQuery.data,
+    recipeItemsQuery.isSuccess,
+    recipeQuery.data,
+    recipeQuery.isSuccess,
+    reset,
+    storageKey,
+  ])
+
+  const clearDraft = useFormDraft<RecipeForm>({
+    storageKey,
+    watch,
+    readyRef,
+    enabled: canManageCatalog && Boolean(storageKey),
+  })
+
+  function discardDraft() {
+    if (storageKey) clearFormDraft(storageKey)
+    reset(
+      serverRecipeForm(
+        recipeQuery.data ?? null,
+        recipeItemsQuery.data ?? [],
+        groupsQuery.data ?? [],
+      ),
+    )
+    setDraftRestored(false)
+  }
 
   const saveMutation = useMutation({
     mutationFn: async (values: RecipeForm) => {
@@ -148,6 +225,8 @@ export function RecipeEditor({ product }: { product: Product }) {
       return data
     },
     onSuccess: () => {
+      clearDraft()
+      setDraftRestored(false)
       void queryClient.invalidateQueries({ queryKey: ['products'] })
       void queryClient.invalidateQueries({ queryKey: ['product', product.id] })
       void queryClient.invalidateQueries({ queryKey: ['recipe', product.id] })
@@ -276,6 +355,19 @@ export function RecipeEditor({ product }: { product: Product }) {
             Crea el primero
           </Link>
           .
+        </div>
+      ) : null}
+
+      {draftRestored ? (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-brand-400/30 bg-brand-400/10 px-3 py-2 text-sm text-brand-200">
+          <span>Se restauró un borrador sin guardar.</span>
+          <button
+            type="button"
+            onClick={discardDraft}
+            className="rounded-lg border border-brand-400/40 px-2 py-1 text-xs text-brand-200"
+          >
+            Descartar borrador
+          </button>
         </div>
       ) : null}
 

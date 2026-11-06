@@ -1,13 +1,54 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '@/features/auth/auth-context'
+import { clearFormDraft, formDraftKey, hasMeaningfulDraft, loadFormDraft } from '@/lib/form-drafts'
 import { supabase } from '@/lib/supabase'
+import { useFormDraft } from '@/lib/use-form-draft'
 import { productFormSchema, type ProductForm } from './catalog-schemas'
 import { RecipeEditor } from './RecipeEditor'
 import { fetchProduct, fetchProductCategories } from './queries'
+
+const emptyProductForm: ProductForm = {
+  name: '',
+  description: '',
+  categoryId: '',
+  kind: 'preparado',
+  price: 120,
+  premiumPrice: 150,
+  isAlcoholic: true,
+  servingSizeMl: 940,
+  active: true,
+  notes: '',
+}
+
+function productToForm(product: {
+  name: string
+  description: string
+  category_id: string | null
+  kind: ProductForm['kind']
+  price: number
+  premium_price: number | null
+  is_alcoholic: boolean
+  serving_size_ml: number
+  active: boolean
+  notes: string
+}): ProductForm {
+  return {
+    name: product.name,
+    description: product.description,
+    categoryId: product.category_id ?? '',
+    kind: product.kind,
+    price: product.price,
+    premiumPrice: product.premium_price,
+    isAlcoholic: product.is_alcoholic,
+    servingSizeMl: product.serving_size_ml,
+    active: product.active,
+    notes: product.notes,
+  }
+}
 
 export function ProductFormPage() {
   const { id } = useParams<{ id: string }>()
@@ -34,42 +75,68 @@ export function ProductFormPage() {
     register,
     handleSubmit,
     reset,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<ProductForm>({
     resolver: zodResolver(productFormSchema),
-    defaultValues: {
-      name: '',
-      description: '',
-      categoryId: '',
-      kind: 'preparado',
-      price: 120,
-      premiumPrice: 150,
-      isAlcoholic: true,
-      servingSizeMl: 940,
-      active: true,
-      notes: '',
-    },
+    defaultValues: emptyProductForm,
   })
 
   const isAlcoholic = useWatch({ control, name: 'isAlcoholic' })
+  const storageKey = profile?.id ? formDraftKey('product', profile.id, productId ?? 'nuevo') : null
+  const initializedKeyRef = useRef<string | null>(null)
+  const readyRef = useRef(false)
+  const [draftRestored, setDraftRestored] = useState(false)
 
   useEffect(() => {
-    const product = productQuery.data
-    if (!product || !categoriesQuery.data) return
+    readyRef.current = false
+    if (!canManageCatalog || !categoriesQuery.isSuccess || !storageKey) return
+    if (!isNew && (!productQuery.isSuccess || !productQuery.data)) return
+    if (initializedKeyRef.current === storageKey) {
+      readyRef.current = true
+      return
+    }
 
-    reset({
-      name: product.name,
-      description: product.description,
-      categoryId: product.category_id ?? '',
-      kind: product.kind,
-      price: product.price,
-      premiumPrice: product.premium_price,
-      isAlcoholic: product.is_alcoholic,
-      servingSizeMl: product.serving_size_ml,
-      active: product.active,
-      notes: product.notes,
-    })
-  }, [productQuery.data, categoriesQuery.data, reset])
+    initializedKeyRef.current = storageKey
+    const serverValues =
+      isNew || !productQuery.data ? emptyProductForm : productToForm(productQuery.data)
+    const draft = loadFormDraft<Partial<ProductForm>>(storageKey)
+    const candidate = draft ? { ...serverValues, ...draft } : serverValues
+    const restored = Boolean(draft && hasMeaningfulDraft(candidate, serverValues))
+
+    if (restored) {
+      reset(candidate)
+    } else {
+      if (draft) clearFormDraft(storageKey)
+      reset(serverValues)
+    }
+
+    readyRef.current = true
+    queueMicrotask(() => setDraftRestored(restored))
+  }, [
+    canManageCatalog,
+    categoriesQuery.isSuccess,
+    isNew,
+    productQuery.data,
+    productQuery.isSuccess,
+    reset,
+    storageKey,
+  ])
+
+  const clearDraft = useFormDraft<ProductForm>({
+    storageKey,
+    watch,
+    readyRef,
+    enabled: canManageCatalog && Boolean(storageKey),
+  })
+
+  function discardDraft() {
+    clearDraft()
+    const serverValues =
+      isNew || !productQuery.data ? emptyProductForm : productToForm(productQuery.data)
+    reset(serverValues)
+    setDraftRestored(false)
+  }
 
   const saveMutation = useMutation({
     mutationFn: async (values: ProductForm) => {
@@ -95,6 +162,8 @@ export function ProductFormPage() {
       return { product: data, created: isNew }
     },
     onSuccess: ({ product, created }) => {
+      clearDraft()
+      setDraftRestored(false)
       void queryClient.invalidateQueries({ queryKey: ['products'] })
       void queryClient.invalidateQueries({ queryKey: ['product', product.id] })
 
@@ -159,6 +228,19 @@ export function ProductFormPage() {
           Volver
         </Link>
       </section>
+
+      {draftRestored ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-brand-400/30 bg-brand-400/10 px-3 py-2 text-sm text-brand-200">
+          <span>Se restauró un borrador sin guardar.</span>
+          <button
+            type="button"
+            onClick={discardDraft}
+            className="rounded-lg border border-brand-400/40 px-2 py-1 text-xs text-brand-200"
+          >
+            Descartar borrador
+          </button>
+        </div>
+      ) : null}
 
       <form
         className="space-y-4 rounded-2xl border border-neutral-800 bg-neutral-900 p-4"
