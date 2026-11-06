@@ -1,4 +1,8 @@
-import type { InventoryMovementType, InventoryStockStatus } from '@/types/database'
+import type {
+  InventoryMovementType,
+  InventoryStockStatus,
+  InventoryWasteReason,
+} from '@/types/database'
 
 export const movementLabels: Record<InventoryMovementType, string> = {
   purchase: 'Compra',
@@ -14,6 +18,13 @@ export const stockStatusLabels: Record<InventoryStockStatus, string> = {
   low: 'Bajo',
   out: 'Agotado',
   no_stock: 'No inventariable',
+}
+
+export const wasteReasonLabels: Record<InventoryWasteReason, string> = {
+  fondo_botella: 'Fondo de botella',
+  producto_vencido: 'Producto vencido',
+  derrame: 'Derrame',
+  otro: 'Otro',
 }
 
 export function formatQty(value: number, unit: string) {

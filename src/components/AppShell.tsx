@@ -7,7 +7,7 @@ const navItems = [
   { label: 'Pedidos', href: '/pedidos', enabled: false },
   { label: 'Inventario', href: '/insumos/stock', enabled: true },
   { label: 'Eventos', href: '/eventos', enabled: false },
-  { label: 'Más', href: '/mas', enabled: false },
+  { label: 'Reportes', href: '/reportes', enabled: true },
 ]
 
 const roleLabels: Record<string, string> = {

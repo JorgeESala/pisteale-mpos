@@ -150,6 +150,18 @@ export function DashboardPage() {
             Movimientos
           </Link>
           <Link
+            to="/insumos/merma"
+            className="rounded-xl border border-neutral-700 px-3 py-3 text-center text-neutral-200 transition hover:border-neutral-500"
+          >
+            Merma
+          </Link>
+          <Link
+            to="/reportes"
+            className="rounded-xl border border-neutral-700 px-3 py-3 text-center text-neutral-200 transition hover:border-neutral-500"
+          >
+            Reportes
+          </Link>
+          <Link
             to="/insumos/grupos"
             className="rounded-xl border border-neutral-700 px-3 py-3 text-center text-neutral-200 transition hover:border-neutral-500"
           >

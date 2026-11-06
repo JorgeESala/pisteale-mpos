@@ -35,7 +35,7 @@ export function IceDailyPage() {
 
   const recordsQuery = useQuery({
     queryKey: ['ice_daily_records'],
-    queryFn: fetchIceDailyRecords,
+    queryFn: () => fetchIceDailyRecords(),
   })
 
   const averageQuery = useQuery({

@@ -291,6 +291,31 @@ export type InventoryStock = {
   stock_status: InventoryStockStatus
 }
 
+export type InventoryWasteReason = 'fondo_botella' | 'producto_vencido' | 'derrame' | 'otro'
+
+export type InventoryWaste = {
+  id: string
+  waste_date: string
+  item_id: string
+  qty_base: number
+  reason: InventoryWasteReason
+  unit_cost: number
+  total_cost: number
+  movement_id: string
+  notes: string
+  created_by: string | null
+  created_at: string
+}
+
+export type InventoryWasteView = InventoryWaste & {
+  item_name: string
+  group_id: string
+  group_name: string
+  category_name: string | null
+  base_unit: BaseUnit
+  created_by_name: string | null
+}
+
 export type ProductCost = {
   product_id: string
   name: string
@@ -411,6 +436,12 @@ export type Database = {
         Update: never
         Relationships: []
       }
+      inventory_waste: {
+        Row: InventoryWaste
+        Insert: never
+        Update: never
+        Relationships: []
+      }
     }
     Views: {
       v_ice_daily_records: {
@@ -435,6 +466,10 @@ export type Database = {
       }
       v_purchase_items: {
         Row: PurchaseItemView
+        Relationships: []
+      }
+      v_inventory_waste: {
+        Row: InventoryWasteView
         Relationships: []
       }
       v_inventory_group_costs: {
@@ -505,6 +540,16 @@ export type Database = {
           p_invoice_ref: string
           p_notes: string
           p_items: Json
+        }
+        Returns: string
+      }
+      create_inventory_waste: {
+        Args: {
+          p_item_id: string
+          p_waste_date: string
+          p_qty_base: number
+          p_reason: InventoryWasteReason
+          p_notes: string
         }
         Returns: string
       }

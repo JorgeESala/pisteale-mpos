@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select extensions.plan(72);
+select extensions.plan(78);
 
 delete from auth.users
 where id in (
@@ -14,6 +14,7 @@ where id in (
 delete from public.document_sequences;
 delete from public.profiles;
 delete from public.ice_daily_records;
+delete from public.inventory_waste;
 delete from public.inventory_movements;
 delete from public.purchase_items;
 delete from public.purchases;
@@ -845,6 +846,48 @@ select extensions.is(
   'adjustment updates stock view'
 );
 
+select extensions.ok(
+  (
+    select public.create_inventory_waste(
+      '55555555-5555-5555-5555-555555555555'::uuid,
+      current_date,
+      100,
+      'fondo_botella',
+      'Prueba de merma'
+    ) is not null
+  ),
+  'admin creates waste'
+);
+
+select extensions.is(
+  (select total_cost from public.inventory_waste order by created_at limit 1),
+  20.00::numeric,
+  'waste cost is calculated'
+);
+
+select extensions.is(
+  (
+    select current_qty_base
+    from public.v_inventory_stock
+    where item_id = '55555555-5555-5555-5555-555555555555'
+  ),
+  1300::numeric,
+  'waste reduces stock'
+);
+
+select extensions.throws_ok(
+  $sql$select public.create_inventory_waste(
+    '55555555-5555-5555-5555-555555555555'::uuid,
+    current_date,
+    2000,
+    'derrame',
+    ''
+  )$sql$,
+  '22023',
+  'Stock insuficiente para el insumo Test Ron',
+  'waste cannot exceed stock'
+);
+
 select extensions.throws_ok(
   $sql$select public.create_purchase(
     current_date,
@@ -963,6 +1006,19 @@ select extensions.throws_ok(
   'operator cannot adjust inventory'
 );
 
+select extensions.throws_ok(
+  $sql$select public.create_inventory_waste(
+    '55555555-5555-5555-5555-555555555555'::uuid,
+    current_date,
+    10,
+    'derrame',
+    ''
+  )$sql$,
+  '42501',
+  'No autorizado',
+  'operator cannot create waste'
+);
+
 reset role;
 
 set local role authenticated;
@@ -1023,6 +1079,13 @@ select extensions.throws_ok(
   '42501',
   'permission denied for table inventory_movements',
   'anon cannot read inventory movements'
+);
+
+select extensions.throws_ok(
+  $sql$select count(*) from public.inventory_waste$sql$,
+  '42501',
+  'permission denied for table inventory_waste',
+  'anon cannot read inventory waste'
 );
 
 reset role;

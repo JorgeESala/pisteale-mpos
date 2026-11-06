@@ -18,6 +18,8 @@ import { PurchaseDetailPage } from '@/features/inventory/PurchaseDetailPage'
 import { PurchasesPage } from '@/features/inventory/PurchasesPage'
 import { StockDetailPage } from '@/features/inventory/StockDetailPage'
 import { StockPage } from '@/features/inventory/StockPage'
+import { WastePage } from '@/features/inventory/WastePage'
+import { ReportsPage } from '@/features/reports/ReportsPage'
 import { ProfilePage } from '@/features/profile/ProfilePage'
 import { queryClient } from '@/lib/queryClient'
 
@@ -129,6 +131,16 @@ export default function App() {
               }
             />
             <Route
+              path="/insumos/merma"
+              element={
+                <ProtectedRoute>
+                  <AppShell>
+                    <WastePage />
+                  </AppShell>
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/insumos/stock/:id"
               element={
                 <ProtectedRoute>
@@ -164,6 +176,16 @@ export default function App() {
                 <ProtectedRoute>
                   <AppShell>
                     <PurchaseDetailPage />
+                  </AppShell>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/reportes"
+              element={
+                <ProtectedRoute>
+                  <AppShell>
+                    <ReportsPage />
                   </AppShell>
                 </ProtectedRoute>
               }

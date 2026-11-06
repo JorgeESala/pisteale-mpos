@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { inventoryAdjustmentFormSchema, purchaseFormSchema } from './inventory-schemas'
+import {
+  inventoryAdjustmentFormSchema,
+  inventoryWasteFormSchema,
+  purchaseFormSchema,
+} from './inventory-schemas'
 
 const itemId = '11111111-1111-4111-8111-111111111111'
 
@@ -57,6 +61,44 @@ describe('inventoryAdjustmentFormSchema', () => {
   it('rejects a negative count', () => {
     const result = inventoryAdjustmentFormSchema.safeParse({
       countedQty: -1,
+      notes: '',
+    })
+
+    expect(result.success).toBe(false)
+  })
+})
+
+describe('inventoryWasteFormSchema', () => {
+  it('accepts a valid waste record', () => {
+    const result = inventoryWasteFormSchema.safeParse({
+      wasteDate: '2026-11-05',
+      itemId,
+      qty: 100,
+      reason: 'fondo_botella',
+      notes: '',
+    })
+
+    expect(result.success).toBe(true)
+  })
+
+  it('rejects a zero quantity', () => {
+    const result = inventoryWasteFormSchema.safeParse({
+      wasteDate: '2026-11-05',
+      itemId,
+      qty: 0,
+      reason: 'fondo_botella',
+      notes: '',
+    })
+
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects an invalid reason', () => {
+    const result = inventoryWasteFormSchema.safeParse({
+      wasteDate: '2026-11-05',
+      itemId,
+      qty: 10,
+      reason: 'otro_motivo',
       notes: '',
     })
 

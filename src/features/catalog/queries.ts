@@ -141,12 +141,26 @@ export async function fetchIceDensity(): Promise<number> {
   return typeof data?.value === 'number' ? data.value : 0.9
 }
 
-export async function fetchIceDailyRecords(): Promise<IceDailyRecordView[]> {
-  const { data, error } = await supabase
+export async function fetchIceDailyRecords(
+  from?: string,
+  to?: string,
+  limit = 30,
+): Promise<IceDailyRecordView[]> {
+  let query = supabase
     .from('v_ice_daily_records')
     .select('*')
     .order('record_date', { ascending: false })
-    .limit(30)
+    .limit(limit)
+
+  if (from) {
+    query = query.gte('record_date', from)
+  }
+
+  if (to) {
+    query = query.lte('record_date', to)
+  }
+
+  const { data, error } = await query
 
   if (error) throw error
 

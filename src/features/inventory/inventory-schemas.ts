@@ -34,3 +34,13 @@ export const inventoryAdjustmentFormSchema = z.object({
 })
 
 export type InventoryAdjustmentForm = z.infer<typeof inventoryAdjustmentFormSchema>
+
+export const inventoryWasteFormSchema = z.object({
+  wasteDate: z.string().min(1, 'La fecha es obligatoria'),
+  itemId: z.string().uuid('Selecciona un insumo'),
+  qty: z.number().positive('La cantidad debe ser mayor a cero'),
+  reason: z.enum(['fondo_botella', 'producto_vencido', 'derrame', 'otro']),
+  notes: z.string().max(1000, 'Máximo 1000 caracteres'),
+})
+
+export type InventoryWasteForm = z.infer<typeof inventoryWasteFormSchema>

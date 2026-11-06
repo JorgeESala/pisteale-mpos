@@ -50,6 +50,12 @@ export function InventoryItemsPage() {
             Movimientos
           </Link>
           <Link
+            to="/insumos/merma"
+            className="rounded-xl border border-neutral-700 px-3 py-2 text-sm text-neutral-300 transition hover:border-neutral-500"
+          >
+            Merma
+          </Link>
+          <Link
             to="/catalogo"
             className="rounded-xl border border-neutral-700 px-3 py-2 text-sm text-neutral-300 transition hover:border-neutral-500"
           >
