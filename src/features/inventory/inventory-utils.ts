@@ -1,4 +1,5 @@
 import type {
+  BottleOpeningStatus,
   InventoryMovementType,
   InventoryStockStatus,
   InventoryWasteReason,
@@ -25,6 +26,11 @@ export const wasteReasonLabels: Record<InventoryWasteReason, string> = {
   producto_vencido: 'Producto vencido',
   derrame: 'Derrame',
   otro: 'Otro',
+}
+
+export const bottleStatusLabels: Record<BottleOpeningStatus, string> = {
+  open: 'Abierta',
+  finished: 'Cerrada',
 }
 
 export function formatQty(value: number, unit: string) {

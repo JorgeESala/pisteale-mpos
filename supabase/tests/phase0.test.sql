@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select extensions.plan(78);
+select extensions.plan(89);
 
 delete from auth.users
 where id in (
@@ -16,6 +16,7 @@ delete from public.profiles;
 delete from public.ice_daily_records;
 delete from public.inventory_waste;
 delete from public.inventory_movements;
+delete from public.bottle_openings;
 delete from public.purchase_items;
 delete from public.purchases;
 
@@ -888,6 +889,135 @@ select extensions.throws_ok(
   'waste cannot exceed stock'
 );
 
+select extensions.ok(
+  (
+    select public.open_bottle(
+      '55555555-5555-5555-5555-555555555555'::uuid,
+      current_date,
+      750,
+      'Apertura de prueba'
+    ) is not null
+  ),
+  'admin opens bottle'
+);
+
+select extensions.is(
+  (
+    select current_qty_base
+    from public.v_inventory_stock
+    where item_id = '55555555-5555-5555-5555-555555555555'
+  ),
+  1300::numeric,
+  'opening bottle keeps stock'
+);
+
+select extensions.throws_ok(
+  $sql$select public.open_bottle(
+    '55555555-5555-5555-5555-555555555555'::uuid,
+    current_date,
+    750,
+    ''
+  )$sql$,
+  '22023',
+  'No hay suficiente stock sellado para abrir la botella',
+  'cannot open more than sealed stock'
+);
+
+select extensions.throws_ok(
+  $sql$select public.consume_open_bottle(
+    (
+      select id
+      from public.bottle_openings
+      where item_id = '55555555-5555-5555-5555-555555555555'
+        and status = 'open'
+      order by created_at desc
+      limit 1
+    ),
+    1000,
+    ''
+  )$sql$,
+  '22023',
+  'La cantidad supera el contenido de la botella',
+  'cannot consume more than bottle content'
+);
+
+select extensions.is(
+  (
+    select public.consume_open_bottle(
+      (
+        select id
+        from public.bottle_openings
+        where item_id = '55555555-5555-5555-5555-555555555555'
+          and status = 'open'
+        order by created_at desc
+        limit 1
+      ),
+      100,
+      'Consumo de prueba'
+    )
+  ),
+  650::numeric,
+  'consume updates bottle remaining'
+);
+
+select extensions.is(
+  (
+    select current_qty_base
+    from public.v_inventory_stock
+    where item_id = '55555555-5555-5555-5555-555555555555'
+  ),
+  1200::numeric,
+  'consume reduces stock'
+);
+
+select public.close_open_bottle(
+  (
+    select id
+    from public.bottle_openings
+    where item_id = '55555555-5555-5555-5555-555555555555'
+      and status = 'open'
+    order by created_at desc
+    limit 1
+  ),
+  50,
+  'Cierre de prueba'
+);
+
+select extensions.is(
+  (
+    select current_qty_base
+    from public.v_inventory_stock
+    where item_id = '55555555-5555-5555-5555-555555555555'
+  ),
+  550::numeric,
+  'closing bottle reduces stock'
+);
+
+select extensions.is(
+  (
+    select status
+    from public.bottle_openings
+    where item_id = '55555555-5555-5555-5555-555555555555'
+    order by created_at desc
+    limit 1
+  ),
+  'finished',
+  'bottle is closed'
+);
+
+select extensions.is(
+  (
+    select w.total_cost
+    from public.inventory_waste w
+    join public.inventory_movements m on m.id = w.movement_id
+    where m.bottle_opening_id is not null
+    order by w.created_at desc
+    limit 1
+  ),
+  10.00::numeric,
+  'bottle bottom waste is recorded'
+);
+
 select extensions.throws_ok(
   $sql$select public.create_purchase(
     current_date,
@@ -1019,6 +1149,18 @@ select extensions.throws_ok(
   'operator cannot create waste'
 );
 
+select extensions.throws_ok(
+  $sql$select public.open_bottle(
+    '55555555-5555-5555-5555-555555555555'::uuid,
+    current_date,
+    750,
+    ''
+  )$sql$,
+  '42501',
+  'No autorizado',
+  'operator cannot open bottle'
+);
+
 reset role;
 
 set local role authenticated;
@@ -1086,6 +1228,13 @@ select extensions.throws_ok(
   '42501',
   'permission denied for table inventory_waste',
   'anon cannot read inventory waste'
+);
+
+select extensions.throws_ok(
+  $sql$select count(*) from public.bottle_openings$sql$,
+  '42501',
+  'permission denied for table bottle_openings',
+  'anon cannot read bottle openings'
 );
 
 reset role;

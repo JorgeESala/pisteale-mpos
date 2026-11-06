@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
+  closeBottleFormSchema,
+  consumeBottleFormSchema,
   inventoryAdjustmentFormSchema,
   inventoryWasteFormSchema,
+  openBottleFormSchema,
   purchaseFormSchema,
 } from './inventory-schemas'
 
@@ -99,6 +102,52 @@ describe('inventoryWasteFormSchema', () => {
       itemId,
       qty: 10,
       reason: 'otro_motivo',
+      notes: '',
+    })
+
+    expect(result.success).toBe(false)
+  })
+})
+
+describe('openBottleFormSchema', () => {
+  it('accepts a valid bottle opening', () => {
+    const result = openBottleFormSchema.safeParse({
+      openingDate: '2026-11-05',
+      itemId,
+      initialMl: 750,
+      notes: '',
+    })
+
+    expect(result.success).toBe(true)
+  })
+
+  it('rejects zero initial content', () => {
+    const result = openBottleFormSchema.safeParse({
+      openingDate: '2026-11-05',
+      itemId,
+      initialMl: 0,
+      notes: '',
+    })
+
+    expect(result.success).toBe(false)
+  })
+})
+
+describe('consumeBottleFormSchema', () => {
+  it('rejects zero consumption', () => {
+    const result = consumeBottleFormSchema.safeParse({
+      qtyMl: 0,
+      notes: '',
+    })
+
+    expect(result.success).toBe(false)
+  })
+})
+
+describe('closeBottleFormSchema', () => {
+  it('rejects a negative leftover', () => {
+    const result = closeBottleFormSchema.safeParse({
+      leftoverMl: -1,
       notes: '',
     })
 

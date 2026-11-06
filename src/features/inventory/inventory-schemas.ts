@@ -44,3 +44,26 @@ export const inventoryWasteFormSchema = z.object({
 })
 
 export type InventoryWasteForm = z.infer<typeof inventoryWasteFormSchema>
+
+export const openBottleFormSchema = z.object({
+  openingDate: z.string().min(1, 'La fecha es obligatoria'),
+  itemId: z.string().uuid('Selecciona un insumo'),
+  initialMl: z.number().positive('La cantidad debe ser mayor a cero'),
+  notes: z.string().max(1000, 'Máximo 1000 caracteres'),
+})
+
+export type OpenBottleForm = z.infer<typeof openBottleFormSchema>
+
+export const consumeBottleFormSchema = z.object({
+  qtyMl: z.number().positive('La cantidad debe ser mayor a cero'),
+  notes: z.string().max(1000, 'Máximo 1000 caracteres'),
+})
+
+export type ConsumeBottleForm = z.infer<typeof consumeBottleFormSchema>
+
+export const closeBottleFormSchema = z.object({
+  leftoverMl: z.number().min(0, 'El sobrante no puede ser negativo'),
+  notes: z.string().max(1000, 'Máximo 1000 caracteres'),
+})
+
+export type CloseBottleForm = z.infer<typeof closeBottleFormSchema>

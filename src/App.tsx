@@ -13,6 +13,8 @@ import { InventoryItemFormPage } from '@/features/catalog/InventoryItemFormPage'
 import { InventoryItemsPage } from '@/features/catalog/InventoryItemsPage'
 import { ProductFormPage } from '@/features/catalog/ProductFormPage'
 import { DashboardPage } from '@/features/dashboard/DashboardPage'
+import { BottleDetailPage } from '@/features/inventory/BottleDetailPage'
+import { BottlesPage } from '@/features/inventory/BottlesPage'
 import { MovementsPage } from '@/features/inventory/MovementsPage'
 import { PurchaseDetailPage } from '@/features/inventory/PurchaseDetailPage'
 import { PurchasesPage } from '@/features/inventory/PurchasesPage'
@@ -136,6 +138,26 @@ export default function App() {
                 <ProtectedRoute>
                   <AppShell>
                     <WastePage />
+                  </AppShell>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/insumos/botellas"
+              element={
+                <ProtectedRoute>
+                  <AppShell>
+                    <BottlesPage />
+                  </AppShell>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/insumos/botellas/:id"
+              element={
+                <ProtectedRoute>
+                  <AppShell>
+                    <BottleDetailPage />
                   </AppShell>
                 </ProtectedRoute>
               }

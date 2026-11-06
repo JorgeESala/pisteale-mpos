@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { fetchIceCost7d, fetchIceDailyRecords, fetchProducts } from '@/features/catalog/queries'
 import {
+  fetchBottleStock,
   fetchInventoryStock,
   fetchInventoryWaste,
   fetchPurchases,
@@ -51,6 +52,11 @@ export function ReportsPage() {
     queryFn: fetchInventoryStock,
   })
 
+  const bottleStockQuery = useQuery({
+    queryKey: ['bottle_stock'],
+    queryFn: fetchBottleStock,
+  })
+
   const productsQuery = useQuery({
     queryKey: ['products'],
     queryFn: fetchProducts,
@@ -78,6 +84,7 @@ export function ReportsPage() {
 
   if (
     stockQuery.isLoading ||
+    bottleStockQuery.isLoading ||
     productsQuery.isLoading ||
     purchasesQuery.isLoading ||
     wasteQuery.isLoading ||
@@ -89,6 +96,7 @@ export function ReportsPage() {
 
   if (
     stockQuery.isError ||
+    bottleStockQuery.isError ||
     productsQuery.isError ||
     purchasesQuery.isError ||
     wasteQuery.isError ||
@@ -97,6 +105,7 @@ export function ReportsPage() {
   ) {
     const error =
       stockQuery.error ??
+      bottleStockQuery.error ??
       productsQuery.error ??
       purchasesQuery.error ??
       wasteQuery.error ??
@@ -110,12 +119,18 @@ export function ReportsPage() {
   }
 
   const stock = (stockQuery.data ?? []).filter((item) => item.track_stock)
+  const bottleStock = (bottleStockQuery.data ?? []).filter(
+    (item) => item.track_stock && item.base_unit === 'ml',
+  )
   const products = productsQuery.data ?? []
   const purchases = purchasesQuery.data ?? []
   const waste = wasteQuery.data ?? []
   const ice = iceQuery.data ?? []
 
   const stockValue = stock.reduce((sum, item) => sum + item.stock_value, 0)
+  const openBottles = bottleStock.reduce((sum, item) => sum + item.open_count, 0)
+  const openMl = bottleStock.reduce((sum, item) => sum + item.open_ml, 0)
+  const openValue = bottleStock.reduce((sum, item) => sum + item.open_value, 0)
   const lowStock = stock.filter((item) => item.stock_status === 'low').length
   const outStock = stock.filter((item) => item.stock_status === 'out').length
   const purchasesTotal = purchases.reduce((sum, purchase) => sum + purchase.total_cost, 0)
@@ -195,6 +210,12 @@ export function ReportsPage() {
           >
             Merma
           </Link>
+          <Link
+            to="/insumos/botellas"
+            className="rounded-xl border border-neutral-700 px-3 py-2 text-sm text-neutral-300 transition hover:border-neutral-500"
+          >
+            Botellas
+          </Link>
         </div>
       </section>
 
@@ -272,6 +293,24 @@ export function ReportsPage() {
                 ? formatCurrency(iceAverageQuery.data.cost_per_drink)
                 : 'Pendiente'}
             </p>
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-neutral-800 bg-neutral-900 p-4">
+        <h2 className="font-semibold">Botellas abiertas</h2>
+        <div className="mt-3 grid grid-cols-3 gap-3 text-sm">
+          <div>
+            <p className="text-neutral-500">Botellas</p>
+            <p>{openBottles}</p>
+          </div>
+          <div>
+            <p className="text-neutral-500">Líquido abierto</p>
+            <p>{openMl.toLocaleString('es-MX', { maximumFractionDigits: 4 })} ml</p>
+          </div>
+          <div>
+            <p className="text-neutral-500">Valor abierto</p>
+            <p>{formatCurrency(openValue)}</p>
           </div>
         </div>
       </section>

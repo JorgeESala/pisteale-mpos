@@ -156,6 +156,12 @@ export function DashboardPage() {
             Merma
           </Link>
           <Link
+            to="/insumos/botellas"
+            className="rounded-xl border border-neutral-700 px-3 py-3 text-center text-neutral-200 transition hover:border-neutral-500"
+          >
+            Botellas
+          </Link>
+          <Link
             to="/reportes"
             className="rounded-xl border border-neutral-700 px-3 py-3 text-center text-neutral-200 transition hover:border-neutral-500"
           >

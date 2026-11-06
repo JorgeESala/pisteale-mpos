@@ -255,6 +255,7 @@ export type InventoryMovement = {
   unit_cost: number
   total_cost: number
   purchase_id: string | null
+  bottle_opening_id: string | null
   notes: string
   occurred_at: string
   created_by: string | null
@@ -314,6 +315,54 @@ export type InventoryWasteView = InventoryWaste & {
   category_name: string | null
   base_unit: BaseUnit
   created_by_name: string | null
+}
+
+export type BottleOpeningStatus = 'open' | 'finished'
+
+export type BottleOpening = {
+  id: string
+  item_id: string
+  opening_date: string
+  initial_ml: number
+  remaining_ml: number
+  status: BottleOpeningStatus
+  opened_at: string
+  finished_at: string | null
+  notes: string
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type BottleOpeningView = BottleOpening & {
+  item_name: string
+  group_id: string
+  group_name: string
+  category_name: string | null
+  base_unit: BaseUnit
+  avg_cost: number
+  consumed_ml: number
+  remaining_value: number
+  created_by_name: string | null
+}
+
+export type BottleStock = {
+  item_id: string
+  name: string
+  group_id: string
+  group_name: string
+  category_name: string | null
+  base_unit: BaseUnit
+  purchase_unit: string
+  purchase_factor: number
+  avg_cost: number
+  track_stock: boolean
+  active: boolean
+  current_stock_ml: number
+  open_ml: number
+  sealed_ml: number
+  open_count: number
+  open_value: number
 }
 
 export type ProductCost = {
@@ -442,6 +491,12 @@ export type Database = {
         Update: never
         Relationships: []
       }
+      bottle_openings: {
+        Row: BottleOpening
+        Insert: never
+        Update: never
+        Relationships: []
+      }
     }
     Views: {
       v_ice_daily_records: {
@@ -470,6 +525,14 @@ export type Database = {
       }
       v_inventory_waste: {
         Row: InventoryWasteView
+        Relationships: []
+      }
+      v_bottle_openings: {
+        Row: BottleOpeningView
+        Relationships: []
+      }
+      v_bottle_stock: {
+        Row: BottleStock
         Relationships: []
       }
       v_inventory_group_costs: {
@@ -552,6 +615,31 @@ export type Database = {
           p_notes: string
         }
         Returns: string
+      }
+      open_bottle: {
+        Args: {
+          p_item_id: string
+          p_opening_date: string
+          p_initial_ml: number
+          p_notes: string
+        }
+        Returns: string
+      }
+      consume_open_bottle: {
+        Args: {
+          p_bottle_id: string
+          p_qty_ml: number
+          p_notes: string
+        }
+        Returns: number
+      }
+      close_open_bottle: {
+        Args: {
+          p_bottle_id: string
+          p_leftover_ml: number
+          p_notes: string
+        }
+        Returns: undefined
       }
       update_my_profile: {
         Args: { p_full_name: string }

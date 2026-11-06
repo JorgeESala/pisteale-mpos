@@ -1,5 +1,8 @@
 import { supabase } from '@/lib/supabase'
 import type {
+  BottleOpeningStatus,
+  BottleOpeningView,
+  BottleStock,
   InventoryMovementView,
   InventoryStock,
   InventoryWasteReason,
@@ -191,4 +194,106 @@ export async function adjustInventoryItem(input: {
   if (error) throw error
 
   return data
+}
+
+export async function fetchBottleStock(): Promise<BottleStock[]> {
+  const { data, error } = await supabase.from('v_bottle_stock').select('*').order('name')
+
+  if (error) throw error
+
+  return data
+}
+
+export async function fetchBottleOpenings(
+  status?: BottleOpeningStatus,
+): Promise<BottleOpeningView[]> {
+  let query = supabase
+    .from('v_bottle_openings')
+    .select('*')
+    .order('opening_date', { ascending: false })
+    .order('created_at', { ascending: false })
+
+  if (status) {
+    query = query.eq('status', status)
+  }
+
+  const { data, error } = await query
+
+  if (error) throw error
+
+  return data
+}
+
+export async function fetchBottleOpening(id: string): Promise<BottleOpeningView | null> {
+  const { data, error } = await supabase
+    .from('v_bottle_openings')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle()
+
+  if (error) throw error
+
+  return data
+}
+
+export async function fetchBottleMovements(bottleId: string): Promise<InventoryMovementView[]> {
+  const { data, error } = await supabase
+    .from('v_inventory_movements')
+    .select('*')
+    .eq('bottle_opening_id', bottleId)
+    .order('occurred_at', { ascending: false })
+
+  if (error) throw error
+
+  return data
+}
+
+export type OpenBottleInput = {
+  itemId: string
+  openingDate: string
+  initialMl: number
+  notes: string
+}
+
+export async function openBottle(input: OpenBottleInput): Promise<string> {
+  const { data, error } = await supabase.rpc('open_bottle', {
+    p_item_id: input.itemId,
+    p_opening_date: input.openingDate,
+    p_initial_ml: input.initialMl,
+    p_notes: input.notes,
+  })
+
+  if (error) throw error
+
+  return data
+}
+
+export async function consumeOpenBottle(input: {
+  bottleId: string
+  qtyMl: number
+  notes: string
+}): Promise<number> {
+  const { data, error } = await supabase.rpc('consume_open_bottle', {
+    p_bottle_id: input.bottleId,
+    p_qty_ml: input.qtyMl,
+    p_notes: input.notes,
+  })
+
+  if (error) throw error
+
+  return data
+}
+
+export async function closeOpenBottle(input: {
+  bottleId: string
+  leftoverMl: number
+  notes: string
+}): Promise<void> {
+  const { error } = await supabase.rpc('close_open_bottle', {
+    p_bottle_id: input.bottleId,
+    p_leftover_ml: input.leftoverMl,
+    p_notes: input.notes,
+  })
+
+  if (error) throw error
 }
