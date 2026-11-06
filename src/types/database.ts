@@ -398,6 +398,8 @@ export type Order = {
   folio: string
   sold_at: string
   status: OrderStatus
+  gross_total: number
+  discount_total: number
   subtotal: number
   tip_total: number
   total: number
@@ -416,6 +418,7 @@ export type OrderView = Order & {
   payment_methods: string | null
   payment_total: number
   warning_count: number
+  promotion_count: number
   created_by_name: string | null
 }
 
@@ -483,8 +486,57 @@ export type SaleCostPendingWarning = {
 
 export type SaleWarning = SaleStockWarning | SaleNoRecipeWarning | SaleCostPendingWarning
 
+export type Promotion = {
+  id: string
+  name: string
+  bundle_qty: number
+  fixed_price: number
+  applies_to: 'any' | 'alcoholic' | 'non_alcoholic'
+  applies_to_tier: 'any' | 'normal' | 'premium'
+  include_category_ids: string[]
+  exclude_category_ids: string[]
+  automatic: boolean
+  active: boolean
+  sort_order: number
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type SalePromotionApplication = {
+  promotion_id: string
+  promotion_name: string
+  automatic: boolean
+  bundle_qty: number
+  applications: number
+  gross_amount: number
+  discount_amount: number
+}
+
+export type OrderPromotion = {
+  id: string
+  order_id: string
+  promotion_id: string | null
+  promotion_name: string
+  automatic: boolean
+  bundle_qty: number
+  applications: number
+  gross_amount: number
+  discount_amount: number
+  created_at: string
+}
+
+export type OrderPromotionView = OrderPromotion & {
+  folio: string
+  sold_at: string
+}
+
 export type SalePreview = {
   warnings: SaleWarning[]
+  gross_total: number
+  discount_total: number
+  subtotal: number
+  promotions: SalePromotionApplication[]
 }
 
 export type ProductCost = {
@@ -637,6 +689,18 @@ export type Database = {
         Update: never
         Relationships: []
       }
+      promotions: {
+        Row: Promotion
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      order_promotions: {
+        Row: OrderPromotion
+        Insert: never
+        Update: never
+        Relationships: []
+      }
     }
     Views: {
       v_ice_daily_records: {
@@ -685,6 +749,10 @@ export type Database = {
       }
       v_payments: {
         Row: PaymentView
+        Relationships: []
+      }
+      v_order_promotions: {
+        Row: OrderPromotionView
         Relationships: []
       }
       v_inventory_group_costs: {
@@ -794,18 +862,35 @@ export type Database = {
         Returns: undefined
       }
       preview_sale: {
-        Args: { p_items: Json }
+        Args: { p_items: Json; p_promotion_ids: string[] }
         Returns: SalePreview
       }
       create_sale: {
         Args: {
           p_items: Json
+          p_promotion_ids: string[]
           p_payment_method: PaymentMethod
           p_payment_reference: string
           p_tip: number
           p_notes: string
         }
         Returns: string
+      }
+      upsert_promotion: {
+        Args: {
+          p_id: string | null
+          p_name: string
+          p_bundle_qty: number
+          p_fixed_price: number
+          p_applies_to: 'any' | 'alcoholic' | 'non_alcoholic'
+          p_applies_to_tier: 'any' | 'normal' | 'premium'
+          p_include_category_ids: string[]
+          p_exclude_category_ids: string[]
+          p_automatic: boolean
+          p_active: boolean
+          p_sort_order: number
+        }
+        Returns: Promotion
       }
       update_my_profile: {
         Args: { p_full_name: string }

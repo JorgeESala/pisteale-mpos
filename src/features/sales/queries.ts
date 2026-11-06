@@ -1,10 +1,12 @@
 import { supabase } from '@/lib/supabase'
 import type {
   OrderItemView,
+  OrderPromotionView,
   OrderTier,
   OrderView,
   PaymentMethod,
   PaymentView,
+  Promotion,
   SalePreview,
   SaleProduct,
   SaleWarning,
@@ -39,18 +41,23 @@ function toRpcItems(items: SaleItemInput[]) {
   }))
 }
 
-export async function previewSale(items: SaleItemInput[]): Promise<SaleWarning[]> {
+export async function previewSale(
+  items: SaleItemInput[],
+  promotionIds: string[] = [],
+): Promise<SalePreview> {
   const { data, error } = await supabase.rpc('preview_sale', {
     p_items: toRpcItems(items),
+    p_promotion_ids: promotionIds,
   })
 
   if (error) throw error
 
-  return (data as SalePreview).warnings ?? []
+  return data as SalePreview
 }
 
 export type CreateSaleInput = {
   items: SaleItemInput[]
+  promotionIds: string[]
   paymentMethod: PaymentMethod
   reference: string
   tip: number
@@ -60,6 +67,7 @@ export type CreateSaleInput = {
 export async function createSale(input: CreateSaleInput): Promise<string> {
   const { data, error } = await supabase.rpc('create_sale', {
     p_items: toRpcItems(input.items),
+    p_promotion_ids: input.promotionIds,
     p_payment_method: input.paymentMethod,
     p_payment_reference: input.reference,
     p_tip: input.tip,
@@ -145,4 +153,62 @@ export async function fetchSalesItems(from?: string, to?: string): Promise<Order
 
 export function parseSaleWarnings(value: unknown): SaleWarning[] {
   return Array.isArray(value) ? (value as SaleWarning[]) : []
+}
+
+export async function fetchPromotions(): Promise<Promotion[]> {
+  const { data, error } = await supabase
+    .from('promotions')
+    .select('*')
+    .order('sort_order')
+    .order('name')
+
+  if (error) throw error
+
+  return data
+}
+
+export async function fetchOrderPromotions(orderId: string): Promise<OrderPromotionView[]> {
+  const { data, error } = await supabase
+    .from('v_order_promotions')
+    .select('*')
+    .eq('order_id', orderId)
+    .order('created_at')
+
+  if (error) throw error
+
+  return data
+}
+
+export type UpdatePromotionInput = {
+  id: string | null
+  name: string
+  bundleQty: number
+  fixedPrice: number
+  appliesTo: Promotion['applies_to']
+  appliesToTier: Promotion['applies_to_tier']
+  includeCategoryIds: string[]
+  excludeCategoryIds: string[]
+  automatic: boolean
+  active: boolean
+  sortOrder: number
+}
+
+export async function upsertPromotion(input: UpdatePromotionInput): Promise<Promotion> {
+  const { data, error } = await supabase.rpc('upsert_promotion', {
+    p_id: input.id,
+    p_name: input.name,
+    p_bundle_qty: input.bundleQty,
+    p_fixed_price: input.fixedPrice,
+    p_applies_to: input.appliesTo,
+    p_applies_to_tier: input.appliesToTier,
+    p_include_category_ids: input.includeCategoryIds,
+    p_exclude_category_ids: input.excludeCategoryIds,
+    p_automatic: input.automatic,
+    p_active: input.active,
+    p_sort_order: input.sortOrder,
+  })
+
+  if (error) throw error
+
+  return data
 }

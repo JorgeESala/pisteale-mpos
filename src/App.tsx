@@ -28,6 +28,8 @@ import { SalesPage } from '@/features/sales/SalesPage'
 import { UserFormPage } from '@/features/users/UserFormPage'
 import { UsersPage } from '@/features/users/UsersPage'
 import { ProfilePage } from '@/features/profile/ProfilePage'
+import { PromotionFormPage } from '@/features/promotions/PromotionFormPage'
+import { PromotionsPage } from '@/features/promotions/PromotionsPage'
 import { queryClient } from '@/lib/queryClient'
 
 export default function App() {
@@ -233,6 +235,26 @@ export default function App() {
                 <ProtectedRoute>
                   <AppShell>
                     <ReportsPage />
+                  </AppShell>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/promociones"
+              element={
+                <ProtectedRoute>
+                  <AppShell>
+                    <PromotionsPage />
+                  </AppShell>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/promociones/:id"
+              element={
+                <ProtectedRoute>
+                  <AppShell>
+                    <PromotionFormPage />
                   </AppShell>
                 </ProtectedRoute>
               }

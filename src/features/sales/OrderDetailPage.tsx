@@ -3,7 +3,13 @@ import { Link, useParams } from 'react-router-dom'
 import { formatCurrency } from '@/lib/format'
 import type { PaymentMethod } from '@/types/database'
 import { formatDateTime } from '@/features/inventory/inventory-utils'
-import { fetchOrder, fetchOrderItems, fetchPayments, parseSaleWarnings } from './queries'
+import {
+  fetchOrder,
+  fetchOrderItems,
+  fetchOrderPromotions,
+  fetchPayments,
+  parseSaleWarnings,
+} from './queries'
 import { warningText } from './sales-warnings'
 
 const paymentMethodLabels: Record<PaymentMethod, string> = {
@@ -39,16 +45,33 @@ export function OrderDetailPage() {
     enabled: Boolean(id),
   })
 
+  const promotionsQuery = useQuery({
+    queryKey: ['order_promotions', id],
+    queryFn: () => fetchOrderPromotions(id!),
+    enabled: Boolean(id),
+  })
+
   if (!id) {
     return <p className="text-sm text-red-300">Pedido no encontrado.</p>
   }
 
-  if (orderQuery.isLoading || itemsQuery.isLoading || paymentsQuery.isLoading) {
+  if (
+    orderQuery.isLoading ||
+    itemsQuery.isLoading ||
+    paymentsQuery.isLoading ||
+    promotionsQuery.isLoading
+  ) {
     return <p className="text-sm text-neutral-500">Cargando pedido…</p>
   }
 
-  if (orderQuery.isError || itemsQuery.isError || paymentsQuery.isError) {
-    const error = orderQuery.error ?? itemsQuery.error ?? paymentsQuery.error
+  if (
+    orderQuery.isError ||
+    itemsQuery.isError ||
+    paymentsQuery.isError ||
+    promotionsQuery.isError
+  ) {
+    const error =
+      orderQuery.error ?? itemsQuery.error ?? paymentsQuery.error ?? promotionsQuery.error
     return (
       <p className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
         {error?.message}
@@ -72,6 +95,7 @@ export function OrderDetailPage() {
   const warnings = parseSaleWarnings(order.inventory_warnings)
   const items = itemsQuery.data ?? []
   const payments = paymentsQuery.data ?? []
+  const promotions = promotionsQuery.data ?? []
   const paymentLabel = order.payment_methods
     ? order.payment_methods
         .split(', ')
@@ -101,7 +125,9 @@ export function OrderDetailPage() {
             <p className="text-xs text-neutral-500">Total cobrado</p>
             <p className="mt-1 text-3xl font-semibold">{formatCurrency(order.total)}</p>
             <p className="mt-1 text-xs text-neutral-500">
-              Subtotal {formatCurrency(order.subtotal)} · propina {formatCurrency(order.tip_total)}
+              Lista {formatCurrency(order.gross_total)} · descuento{' '}
+              {formatCurrency(order.discount_total)} · subtotal {formatCurrency(order.subtotal)} ·
+              propina {formatCurrency(order.tip_total)}
             </p>
           </div>
           <span className="rounded-full bg-brand-400/15 px-2 py-1 text-[11px] text-brand-300">
@@ -170,6 +196,24 @@ export function OrderDetailPage() {
           </article>
         ))}
       </section>
+
+      {promotions.length > 0 ? (
+        <section className="space-y-2 rounded-2xl border border-neutral-800 bg-neutral-900 p-4">
+          <h2 className="font-semibold">Promociones</h2>
+          {promotions.map((promotion) => (
+            <div key={promotion.id} className="flex items-center justify-between gap-3 text-sm">
+              <span className="text-neutral-400">
+                {promotion.promotion_name} · {promotion.applications}{' '}
+                {promotion.applications === 1 ? 'aplicación' : 'aplicaciones'} ·{' '}
+                {promotion.automatic ? 'automática' : 'manual'}
+              </span>
+              <span className="font-medium text-green-300">
+                -{formatCurrency(promotion.discount_amount)}
+              </span>
+            </div>
+          ))}
+        </section>
+      ) : null}
 
       {warnings.length > 0 ? (
         <section className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4">

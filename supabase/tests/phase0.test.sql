@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select extensions.plan(116);
+select extensions.plan(130);
 
 delete from auth.users
 where id in (
@@ -1662,6 +1662,255 @@ select extensions.is(
   ),
   455::numeric,
   'sale consumes from open bottle'
+);
+
+reset role;
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claim.sub',
+  '11111111-1111-1111-1111-111111111111',
+  true
+);
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"11111111-1111-1111-1111-111111111111","role":"authenticated"}',
+  true
+);
+
+select public.upsert_promotion(
+  null,
+  'Manual 2 x $150',
+  2,
+  150,
+  'non_alcoholic',
+  'normal',
+  '{}'::uuid[],
+  '{}'::uuid[],
+  false,
+  true,
+  20
+);
+
+reset role;
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claim.sub',
+  '22222222-2222-2222-2222-222222222222',
+  true
+);
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"22222222-2222-2222-2222-222222222222","role":"authenticated"}',
+  true
+);
+
+select extensions.ok(
+  exists (
+    select 1
+    from public.promotions
+    where name = '2 x $180'
+      and active
+      and automatic
+  ),
+  'automatic 2 x 180 promotion is configured'
+);
+
+select extensions.is(
+  (
+    (public.preview_sale(
+      jsonb_build_array(
+        jsonb_build_object(
+          'product_id', (select id from public.products where name = 'Test Cocktail Premium'),
+          'tier', 'normal',
+          'qty', 2
+        )
+      ),
+      '{}'::uuid[]
+    ))->>'gross_total'
+  )::numeric,
+  240::numeric,
+  'automatic promotion gross total is calculated'
+);
+
+select extensions.is(
+  (
+    (public.preview_sale(
+      jsonb_build_array(
+        jsonb_build_object(
+          'product_id', (select id from public.products where name = 'Test Cocktail Premium'),
+          'tier', 'normal',
+          'qty', 2
+        )
+      ),
+      '{}'::uuid[]
+    ))->>'discount_total'
+  )::numeric,
+  60::numeric,
+  'automatic 2 x 180 discount is applied'
+);
+
+select extensions.is(
+  (
+    (public.preview_sale(
+      jsonb_build_array(
+        jsonb_build_object(
+          'product_id', (select id from public.products where name = 'Test Cocktail Premium'),
+          'tier', 'normal',
+          'qty', 2
+        )
+      ),
+      '{}'::uuid[]
+    ))->>'subtotal'
+  )::numeric,
+  180::numeric,
+  'automatic promotion net subtotal is calculated'
+);
+
+select extensions.is(
+  jsonb_array_length(
+    (public.preview_sale(
+      jsonb_build_array(
+        jsonb_build_object(
+          'product_id', (select id from public.products where name = 'Test Cocktail Premium'),
+          'tier', 'normal',
+          'qty', 2
+        )
+      ),
+      '{}'::uuid[]
+    ))->'promotions'
+  ),
+  1,
+  'automatic promotion application is returned'
+);
+
+select extensions.is(
+  (
+    (public.preview_sale(
+      jsonb_build_array(
+        jsonb_build_object(
+          'product_id', (select id from public.products where name = 'Calimoncho'),
+          'tier', 'normal',
+          'qty', 2
+        )
+      ),
+      '{}'::uuid[]
+    ))->>'discount_total'
+  )::numeric,
+  0::numeric,
+  'automatic promotion excludes wine'
+);
+
+select extensions.is(
+  (
+    (public.preview_sale(
+      jsonb_build_array(
+        jsonb_build_object(
+          'product_id', (select id from public.products where name = 'Test Cocktail Premium'),
+          'tier', 'premium',
+          'qty', 2
+        )
+      ),
+      '{}'::uuid[]
+    ))->>'discount_total'
+  )::numeric,
+  0::numeric,
+  'automatic promotion excludes premium tier'
+);
+
+select extensions.is(
+  (
+    (public.preview_sale(
+      jsonb_build_array(
+        jsonb_build_object(
+          'product_id', (select id from public.products where name = 'Test Barman Drink'),
+          'tier', 'normal',
+          'qty', 2
+        )
+      ),
+      '{}'::uuid[]
+    ))->>'discount_total'
+  )::numeric,
+  0::numeric,
+  'manual promotion is not applied automatically'
+);
+
+select extensions.is(
+  (
+    (public.preview_sale(
+      jsonb_build_array(
+        jsonb_build_object(
+          'product_id', (select id from public.products where name = 'Test Barman Drink'),
+          'tier', 'normal',
+          'qty', 2
+        )
+      ),
+      array[(select id from public.promotions where name = 'Manual 2 x $150')]
+    ))->>'discount_total'
+  )::numeric,
+  50::numeric,
+  'manual promotion discount is applied when selected'
+);
+
+select extensions.is(
+  (
+    (public.preview_sale(
+      jsonb_build_array(
+        jsonb_build_object(
+          'product_id', (select id from public.products where name = 'Test Barman Drink'),
+          'tier', 'normal',
+          'qty', 2
+        )
+      ),
+      array[(select id from public.promotions where name = 'Manual 2 x $150')]
+    ))->>'subtotal'
+  )::numeric,
+  150::numeric,
+  'manual promotion net subtotal is calculated'
+);
+
+select public.create_sale(
+  jsonb_build_array(
+    jsonb_build_object(
+      'product_id', (select id from public.products where name = 'Test Cocktail Premium'),
+      'tier', 'normal',
+      'qty', 2
+    )
+  ),
+  '{}'::uuid[],
+  'cash',
+  '',
+  0,
+  'Venta con promoción automática'
+);
+
+select extensions.is(
+  (select total from public.v_orders order by folio desc limit 1),
+  180::numeric,
+  'sale total uses automatic promotion'
+);
+
+select extensions.is(
+  (select discount_total from public.v_orders order by folio desc limit 1),
+  60::numeric,
+  'sale stores automatic promotion discount'
+);
+
+select extensions.is(
+  (select promotion_count from public.v_orders order by folio desc limit 1),
+  1,
+  'sale stores promotion application'
+);
+
+select extensions.is(
+  (
+    select amount
+    from public.v_payments
+    where order_id = (select id from public.v_orders order by folio desc limit 1)
+  ),
+  180::numeric,
+  'payment uses promoted total'
 );
 
 reset role;

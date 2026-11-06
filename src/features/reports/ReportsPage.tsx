@@ -153,6 +153,8 @@ export function ReportsPage() {
   const waste = wasteQuery.data ?? []
   const ice = iceQuery.data ?? []
 
+  const salesGross = salesOrders.reduce((sum, order) => sum + order.gross_total, 0)
+  const salesDiscount = salesOrders.reduce((sum, order) => sum + order.discount_total, 0)
   const salesSubtotal = salesOrders.reduce((sum, order) => sum + order.subtotal, 0)
   const salesTotal = salesOrders.reduce((sum, order) => sum + order.total, 0)
   const salesTips = salesOrders.reduce((sum, order) => sum + order.tip_total, 0)
@@ -320,7 +322,17 @@ export function ReportsPage() {
 
         <div className="mt-3 grid grid-cols-2 gap-2">
           <div className="rounded-xl border border-neutral-800 bg-neutral-950 p-3">
-            <p className="text-[11px] text-neutral-500">Ventas</p>
+            <p className="text-[11px] text-neutral-500">Precio de lista</p>
+            <p className="mt-1 text-lg font-semibold">{formatCurrency(salesGross)}</p>
+          </div>
+          <div className="rounded-xl border border-neutral-800 bg-neutral-950 p-3">
+            <p className="text-[11px] text-neutral-500">Descuentos</p>
+            <p className="mt-1 text-lg font-semibold text-green-300">
+              -{formatCurrency(salesDiscount)}
+            </p>
+          </div>
+          <div className="rounded-xl border border-neutral-800 bg-neutral-950 p-3">
+            <p className="text-[11px] text-neutral-500">Ventas netas</p>
             <p className="mt-1 text-lg font-semibold">{formatCurrency(salesSubtotal)}</p>
           </div>
           <div className="rounded-xl border border-neutral-800 bg-neutral-950 p-3">

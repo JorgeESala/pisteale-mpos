@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { formatCurrency } from '@/lib/format'
-import type { OrderTier, PaymentMethod, SaleWarning } from '@/types/database'
+import type { OrderTier, PaymentMethod, Promotion, SaleWarning } from '@/types/database'
 import { formatDateTime } from '@/features/inventory/inventory-utils'
 import {
   addSaleLine,
@@ -11,7 +11,7 @@ import {
   saleLineTotal,
   saleSubtotal,
 } from './sales-cart'
-import { createSale, fetchOrders, fetchSaleProducts, previewSale } from './queries'
+import { createSale, fetchOrders, fetchPromotions, fetchSaleProducts, previewSale } from './queries'
 import { warningText } from './sales-warnings'
 
 const paymentMethodLabels: Record<PaymentMethod, string> = {
@@ -40,6 +40,11 @@ export function SalesPage() {
     queryFn: () => fetchOrders(20),
   })
 
+  const promotionsQuery = useQuery({
+    queryKey: ['promotions'],
+    queryFn: fetchPromotions,
+  })
+
   const [cart, setCart] = useState<SaleCartLine[]>([])
   const [selectedProductId, setSelectedProductId] = useState('')
   const [selectedTier, setSelectedTier] = useState<OrderTier>('normal')
@@ -48,43 +53,40 @@ export function SalesPage() {
   const [reference, setReference] = useState('')
   const [tip, setTip] = useState(0)
   const [notes, setNotes] = useState('')
+  const [selectedPromotionIds, setSelectedPromotionIds] = useState<string[]>([])
   const [warnings, setWarnings] = useState<SaleWarning[]>([])
   const [showWarnings, setShowWarnings] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const products = productsQuery.data ?? []
   const selectedProduct = products.find((product) => product.id === selectedProductId)
+  const saleItems = cart.map((line) => ({
+    productId: line.productId,
+    tier: line.tier,
+    qty: line.qty,
+  }))
   const subtotal = saleSubtotal(cart)
-  const total = Math.round((subtotal + tip) * 100) / 100
-
-  const previewMutation = useMutation({
-    mutationFn: () =>
-      previewSale(
-        cart.map((line) => ({
-          productId: line.productId,
-          tier: line.tier,
-          qty: line.qty,
-        })),
-      ),
-    onSuccess: (result) => {
-      if (result.length > 0) {
-        setWarnings(result)
-        setShowWarnings(true)
-      } else {
-        void completeSale()
-      }
-    },
-    onError: (mutationError) => setError(mutationError.message),
+  const previewQuery = useQuery({
+    queryKey: ['sale_preview', JSON.stringify(saleItems), selectedPromotionIds.join(',')],
+    queryFn: () => previewSale(saleItems, selectedPromotionIds),
+    enabled: cart.length > 0,
   })
+  const gross = previewQuery.data?.gross_total ?? subtotal
+  const discount = previewQuery.data?.discount_total ?? 0
+  const netSubtotal = previewQuery.data?.subtotal ?? subtotal
+  const total = Math.round((netSubtotal + tip) * 100) / 100
+  const manualPromotions = (promotionsQuery.data ?? []).filter(
+    (promotion) => promotion.active && !promotion.automatic,
+  )
+  const appliedPromotionIds = new Set(
+    (previewQuery.data?.promotions ?? []).map((promotion) => promotion.promotion_id),
+  )
 
   const createMutation = useMutation({
     mutationFn: () =>
       createSale({
-        items: cart.map((line) => ({
-          productId: line.productId,
-          tier: line.tier,
-          qty: line.qty,
-        })),
+        items: saleItems,
+        promotionIds: selectedPromotionIds,
         paymentMethod,
         reference,
         tip,
@@ -100,6 +102,7 @@ export function SalesPage() {
       void queryClient.invalidateQueries({ queryKey: ['bottle_opening'] })
       void queryClient.invalidateQueries({ queryKey: ['bottle_movements'] })
       setCart([])
+      setSelectedPromotionIds([])
       setWarnings([])
       setShowWarnings(false)
       setTip(0)
@@ -157,15 +160,36 @@ export function SalesPage() {
       return
     }
 
-    previewMutation.mutate()
+    if (previewQuery.isError) {
+      setError(previewQuery.error.message)
+      return
+    }
+
+    const currentWarnings = previewQuery.data?.warnings ?? []
+    if (currentWarnings.length > 0) {
+      setWarnings(currentWarnings)
+      setShowWarnings(true)
+      return
+    }
+
+    void completeSale()
   }
 
-  if (productsQuery.isLoading || ordersQuery.isLoading) {
+  function togglePromotion(promotion: Promotion) {
+    setShowWarnings(false)
+    setSelectedPromotionIds((current) =>
+      current.includes(promotion.id)
+        ? current.filter((id) => id !== promotion.id)
+        : [...current, promotion.id],
+    )
+  }
+
+  if (productsQuery.isLoading || ordersQuery.isLoading || promotionsQuery.isLoading) {
     return <p className="text-sm text-neutral-500">Cargando ventas…</p>
   }
 
-  if (productsQuery.isError || ordersQuery.isError) {
-    const queryError = productsQuery.error ?? ordersQuery.error
+  if (productsQuery.isError || ordersQuery.isError || promotionsQuery.isError) {
+    const queryError = productsQuery.error ?? ordersQuery.error ?? promotionsQuery.error
     return (
       <p className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
         {queryError?.message}
@@ -317,8 +341,18 @@ export function SalesPage() {
 
         <div className="space-y-2 border-t border-neutral-800 pt-3 text-sm">
           <div className="flex justify-between gap-3 text-neutral-400">
+            <span>Precio de lista</span>
+            <span>{formatCurrency(gross)}</span>
+          </div>
+          {discount > 0 ? (
+            <div className="flex justify-between gap-3 text-green-300">
+              <span>Descuento promociones</span>
+              <span>-{formatCurrency(discount)}</span>
+            </div>
+          ) : null}
+          <div className="flex justify-between gap-3 text-neutral-400">
             <span>Subtotal</span>
-            <span>{formatCurrency(subtotal)}</span>
+            <span>{formatCurrency(netSubtotal)}</span>
           </div>
           <div className="flex items-center justify-between gap-3 text-neutral-400">
             <label htmlFor="saleTip">Propina</label>
@@ -336,7 +370,84 @@ export function SalesPage() {
             <span>Total</span>
             <span>{formatCurrency(total)}</span>
           </div>
+          {previewQuery.isFetching ? (
+            <p className="text-[11px] text-neutral-500">Calculando promociones…</p>
+          ) : null}
+          {previewQuery.isError ? (
+            <p className="text-[11px] text-red-300">{previewQuery.error.message}</p>
+          ) : null}
         </div>
+      </section>
+
+      <section className="space-y-3 rounded-2xl border border-neutral-800 bg-neutral-900 p-4">
+        <h2 className="font-semibold">Promociones</h2>
+
+        {previewQuery.data?.promotions
+          .filter((promotion) => promotion.automatic)
+          .map((promotion) => (
+            <div
+              key={promotion.promotion_id}
+              className="flex items-center justify-between gap-3 rounded-xl border border-brand-400/30 bg-brand-400/10 p-3 text-sm"
+            >
+              <div>
+                <p className="font-medium text-brand-200">{promotion.promotion_name}</p>
+                <p className="text-xs text-neutral-400">
+                  Automática · {promotion.applications}{' '}
+                  {promotion.applications === 1 ? 'aplicación' : 'aplicaciones'}
+                </p>
+              </div>
+              <span className="font-semibold text-green-300">
+                -{formatCurrency(promotion.discount_amount)}
+              </span>
+            </div>
+          ))}
+
+        {manualPromotions.length === 0 ? (
+          <p className="text-sm text-neutral-500">No hay promociones manuales activas.</p>
+        ) : (
+          <div className="space-y-2">
+            {manualPromotions.map((promotion) => {
+              const selected = selectedPromotionIds.includes(promotion.id)
+              const applied = appliedPromotionIds.has(promotion.id)
+
+              return (
+                <label
+                  key={promotion.id}
+                  className="flex items-start gap-3 rounded-xl border border-neutral-800 bg-neutral-950 p-3 text-sm"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selected}
+                    onChange={() => togglePromotion(promotion)}
+                    className="mt-0.5 size-4 rounded border-neutral-600 bg-neutral-950"
+                  />
+                  <span className="min-w-0">
+                    <span className="block font-medium text-neutral-200">{promotion.name}</span>
+                    <span className="block text-xs text-neutral-500">
+                      {promotion.bundle_qty} × {formatCurrency(promotion.fixed_price)} ·{' '}
+                      {promotion.applies_to === 'alcoholic'
+                        ? 'Con alcohol'
+                        : promotion.applies_to === 'non_alcoholic'
+                          ? 'Sin alcohol'
+                          : 'Cualquier bebida'}
+                      {' · '}
+                      {promotion.applies_to_tier === 'any'
+                        ? 'Cualquier tier'
+                        : promotion.applies_to_tier === 'premium'
+                          ? 'Premium'
+                          : 'Normal'}
+                    </span>
+                    {selected && !applied ? (
+                      <span className="mt-1 block text-[11px] text-amber-300">
+                        No hay suficientes bebidas elegibles para aplicar esta promoción.
+                      </span>
+                    ) : null}
+                  </span>
+                </label>
+              )
+            })}
+          </div>
+        )}
       </section>
 
       <section className="space-y-4 rounded-2xl border border-neutral-800 bg-neutral-900 p-4">
@@ -399,12 +510,10 @@ export function SalesPage() {
         <button
           type="button"
           onClick={handleCheckout}
-          disabled={previewMutation.isPending || createMutation.isPending || cart.length === 0}
+          disabled={previewQuery.isFetching || createMutation.isPending || cart.length === 0}
           className="w-full rounded-xl bg-brand-400 px-4 py-3.5 text-base font-semibold text-neutral-950 transition hover:bg-brand-300 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {previewMutation.isPending || createMutation.isPending
-            ? 'Procesando…'
-            : `Cobrar ${formatCurrency(total)}`}
+          {createMutation.isPending ? 'Procesando…' : `Cobrar ${formatCurrency(total)}`}
         </button>
       </section>
 
