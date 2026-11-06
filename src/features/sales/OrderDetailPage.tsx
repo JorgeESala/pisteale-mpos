@@ -205,7 +205,7 @@ export function OrderDetailPage() {
               <span className="text-neutral-400">
                 {promotion.promotion_name} · {promotion.applications}{' '}
                 {promotion.applications === 1 ? 'aplicación' : 'aplicaciones'} ·{' '}
-                {promotion.automatic ? 'automática' : 'manual'}
+                {promotion.line_targeted ? 'socio' : promotion.automatic ? 'automática' : 'manual'}
               </span>
               <span className="font-medium text-green-300">
                 -{formatCurrency(promotion.discount_amount)}

@@ -16,6 +16,8 @@ describe('promotionFormSchema', () => {
       automatic: true,
       active: true,
       sortOrder: 10,
+      lineTargeted: false,
+      maxPerOrder: null,
     })
 
     expect(result.success).toBe(true)
@@ -33,6 +35,8 @@ describe('promotionFormSchema', () => {
       automatic: false,
       active: true,
       sortOrder: 0,
+      lineTargeted: false,
+      maxPerOrder: null,
     })
 
     expect(result.success).toBe(false)
@@ -50,6 +54,8 @@ describe('promotionFormSchema', () => {
       automatic: false,
       active: true,
       sortOrder: 0,
+      lineTargeted: false,
+      maxPerOrder: null,
     })
 
     expect(result.success).toBe(false)

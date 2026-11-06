@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select extensions.plan(130);
+select extensions.plan(140);
 
 delete from auth.users
 where id in (
@@ -1911,6 +1911,214 @@ select extensions.is(
   ),
   180::numeric,
   'payment uses promoted total'
+);
+
+reset role;
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claim.sub',
+  '22222222-2222-2222-2222-222222222222',
+  true
+);
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"22222222-2222-2222-2222-222222222222","role":"authenticated"}',
+  true
+);
+
+select extensions.is(
+  (
+    (public.preview_sale(
+      jsonb_build_array(
+        jsonb_build_object(
+          'product_id', (select id from public.products where name = 'Test Cocktail Premium'),
+          'tier', 'normal',
+          'qty', 1
+        )
+      ),
+      '{}'::uuid[],
+      jsonb_build_object(
+        'promotion_id', (select id from public.promotions where name = 'Precio socio'),
+        'product_id', (select id from public.products where name = 'Test Cocktail Premium'),
+        'tier', 'normal'
+      )
+    ))->>'gross_total'
+  )::numeric,
+  120::numeric,
+  'member price gross total is calculated'
+);
+
+select extensions.is(
+  (
+    (public.preview_sale(
+      jsonb_build_array(
+        jsonb_build_object(
+          'product_id', (select id from public.products where name = 'Test Cocktail Premium'),
+          'tier', 'normal',
+          'qty', 1
+        )
+      ),
+      '{}'::uuid[],
+      jsonb_build_object(
+        'promotion_id', (select id from public.promotions where name = 'Precio socio'),
+        'product_id', (select id from public.products where name = 'Test Cocktail Premium'),
+        'tier', 'normal'
+      )
+    ))->>'discount_total'
+  )::numeric,
+  30::numeric,
+  'member price applies 30 discount'
+);
+
+select extensions.is(
+  (
+    (public.preview_sale(
+      jsonb_build_array(
+        jsonb_build_object(
+          'product_id', (select id from public.products where name = 'Test Cocktail Premium'),
+          'tier', 'normal',
+          'qty', 1
+        )
+      ),
+      '{}'::uuid[],
+      jsonb_build_object(
+        'promotion_id', (select id from public.promotions where name = 'Precio socio'),
+        'product_id', (select id from public.products where name = 'Test Cocktail Premium'),
+        'tier', 'normal'
+      )
+    ))->>'subtotal'
+  )::numeric,
+  90::numeric,
+  'member price net subtotal is calculated'
+);
+
+select extensions.is(
+  (
+    select (e->>'line_targeted')::boolean
+    from jsonb_array_elements(
+      (public.preview_sale(
+        jsonb_build_array(
+          jsonb_build_object(
+            'product_id', (select id from public.products where name = 'Test Cocktail Premium'),
+            'tier', 'normal',
+            'qty', 1
+          )
+        ),
+        '{}'::uuid[],
+        jsonb_build_object(
+          'promotion_id', (select id from public.promotions where name = 'Precio socio'),
+          'product_id', (select id from public.products where name = 'Test Cocktail Premium'),
+          'tier', 'normal'
+        )
+      ))->'promotions'
+    ) as e
+  ),
+  true,
+  'member price is recorded as a line promotion'
+);
+
+select extensions.is(
+  (
+    (public.preview_sale(
+      jsonb_build_array(
+        jsonb_build_object(
+          'product_id', (select id from public.products where name = 'Test Cocktail Premium'),
+          'tier', 'normal',
+          'qty', 3
+        )
+      ),
+      '{}'::uuid[],
+      jsonb_build_object(
+        'promotion_id', (select id from public.promotions where name = 'Precio socio'),
+        'product_id', (select id from public.products where name = 'Test Cocktail Premium'),
+        'tier', 'normal'
+      )
+    ))->>'discount_total'
+  )::numeric,
+  90::numeric,
+  'member drink is excluded from automatic pairing'
+);
+
+select extensions.is(
+  (
+    (public.preview_sale(
+      jsonb_build_array(
+        jsonb_build_object(
+          'product_id', (select id from public.products where name = 'Test Cocktail Premium'),
+          'tier', 'normal',
+          'qty', 3
+        )
+      ),
+      '{}'::uuid[],
+      jsonb_build_object(
+        'promotion_id', (select id from public.promotions where name = 'Precio socio'),
+        'product_id', (select id from public.products where name = 'Test Cocktail Premium'),
+        'tier', 'normal'
+      )
+    ))->>'subtotal'
+  )::numeric,
+  270::numeric,
+  'member price allows automatic promo on other drinks'
+);
+
+select extensions.throws_ok(
+  $sql$select public.preview_sale(
+    jsonb_build_array(
+      jsonb_build_object(
+        'product_id', (select id from public.products where name = 'Test Cocktail Premium'),
+        'tier', 'premium',
+        'qty', 1
+      )
+    ),
+    '{}'::uuid[],
+    jsonb_build_object(
+      'promotion_id', (select id from public.promotions where name = 'Precio socio'),
+      'product_id', (select id from public.products where name = 'Test Cocktail Premium'),
+      'tier', 'premium'
+    )
+  )$sql$,
+  '22023',
+  'La bebida seleccionada no es elegible para esta promoción',
+  'member price rejects premium drink'
+);
+
+select public.create_sale(
+  jsonb_build_array(
+    jsonb_build_object(
+      'product_id', (select id from public.products where name = 'Test Cocktail Premium'),
+      'tier', 'normal',
+      'qty', 1
+    )
+  ),
+  '{}'::uuid[],
+  jsonb_build_object(
+    'promotion_id', (select id from public.promotions where name = 'Precio socio'),
+    'product_id', (select id from public.products where name = 'Test Cocktail Premium'),
+    'tier', 'normal'
+  ),
+  'cash',
+  '',
+  0,
+  'Venta precio socio'
+);
+
+select extensions.is(
+  (select total from public.v_orders order by folio desc limit 1),
+  90::numeric,
+  'member sale total is 90'
+);
+
+select extensions.is(
+  (select discount_total from public.v_orders order by folio desc limit 1),
+  30::numeric,
+  'member sale stores discount'
+);
+
+select extensions.is(
+  (select promotion_count from public.v_orders order by folio desc limit 1),
+  1,
+  'member sale stores promotion'
 );
 
 reset role;

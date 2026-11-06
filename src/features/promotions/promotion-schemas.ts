@@ -12,6 +12,8 @@ export const promotionFormSchema = z
     automatic: z.boolean(),
     active: z.boolean(),
     sortOrder: z.number().int(),
+    lineTargeted: z.boolean(),
+    maxPerOrder: z.number().int().positive().nullable(),
   })
   .superRefine((data, ctx) => {
     const overlap = data.includeCategoryIds.filter((id) => data.excludeCategoryIds.includes(id))
@@ -21,6 +23,14 @@ export const promotionFormSchema = z
         code: 'custom',
         message: 'Una categoría no puede estar incluida y excluida a la vez',
         path: ['includeCategoryIds'],
+      })
+    }
+
+    if (data.lineTargeted && data.bundleQty !== 1) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Una promoción por línea debe ser de una sola bebida',
+        path: ['bundleQty'],
       })
     }
   })

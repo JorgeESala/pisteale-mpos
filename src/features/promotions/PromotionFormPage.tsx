@@ -19,6 +19,8 @@ const defaults: PromotionForm = {
   automatic: false,
   active: true,
   sortOrder: 0,
+  lineTargeted: false,
+  maxPerOrder: null,
 }
 
 export function PromotionFormPage() {
@@ -78,6 +80,8 @@ export function PromotionFormPage() {
         automatic: promotion.automatic,
         active: promotion.active,
         sortOrder: promotion.sort_order,
+        lineTargeted: promotion.line_targeted,
+        maxPerOrder: promotion.max_per_order,
       })
     } else {
       reset(defaults)
@@ -98,6 +102,8 @@ export function PromotionFormPage() {
         automatic: values.automatic,
         active: values.active,
         sortOrder: values.sortOrder,
+        lineTargeted: values.lineTargeted,
+        maxPerOrder: values.maxPerOrder,
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['promotions'] })
@@ -316,6 +322,42 @@ export function PromotionFormPage() {
               {category.name}
             </label>
           ))}
+        </div>
+
+        <div className="space-y-3 rounded-xl border border-neutral-800 bg-neutral-950 p-3">
+          <label className="flex items-start gap-3 text-sm text-neutral-300">
+            <input
+              type="checkbox"
+              className="mt-0.5 size-4 rounded border-neutral-600 bg-neutral-950"
+              {...register('lineTargeted')}
+            />
+            <span>
+              <span className="block font-medium text-neutral-200">Precio por línea</span>
+              <span className="block text-neutral-500">
+                El cajero aplica la promoción a una bebida específica. Requiere 1 bebida.
+              </span>
+            </span>
+          </label>
+
+          <div>
+            <label htmlFor="maxPerOrder" className="mb-1.5 block text-sm text-neutral-300">
+              Máximo por ticket (opcional)
+            </label>
+            <input
+              id="maxPerOrder"
+              type="number"
+              min="1"
+              step="1"
+              placeholder="Sin límite"
+              className="w-full rounded-xl border border-neutral-700 bg-neutral-900 px-4 py-3 text-base text-neutral-100 outline-none transition focus:border-brand-400"
+              {...register('maxPerOrder', {
+                setValueAs: (value) => (value === '' ? null : Number(value)),
+              })}
+            />
+            {errors.maxPerOrder ? (
+              <p className="mt-1.5 text-sm text-red-400">{errors.maxPerOrder.message}</p>
+            ) : null}
+          </div>
         </div>
 
         <label className="flex items-start gap-3 text-sm text-neutral-300">

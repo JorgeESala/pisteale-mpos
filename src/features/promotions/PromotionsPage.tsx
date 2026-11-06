@@ -84,7 +84,11 @@ export function PromotionsPage() {
                 <p className="truncate font-semibold">{promotion.name}</p>
                 <p className="mt-0.5 text-xs text-neutral-500">
                   {promotion.bundle_qty} × {formatCurrency(promotion.fixed_price)} ·{' '}
-                  {promotion.automatic ? 'Automática' : 'Manual'}
+                  {promotion.line_targeted
+                    ? 'Precio por línea'
+                    : promotion.automatic
+                      ? 'Automática'
+                      : 'Manual'}
                 </p>
               </div>
               <span

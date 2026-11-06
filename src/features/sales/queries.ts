@@ -41,13 +41,27 @@ function toRpcItems(items: SaleItemInput[]) {
   }))
 }
 
+export type LinePromotionTarget = {
+  promotionId: string
+  productId: string
+  tier: OrderTier
+}
+
 export async function previewSale(
   items: SaleItemInput[],
   promotionIds: string[] = [],
+  linePromotion: LinePromotionTarget | null = null,
 ): Promise<SalePreview> {
   const { data, error } = await supabase.rpc('preview_sale', {
     p_items: toRpcItems(items),
     p_promotion_ids: promotionIds,
+    p_line_promotion: linePromotion
+      ? {
+          promotion_id: linePromotion.promotionId,
+          product_id: linePromotion.productId,
+          tier: linePromotion.tier,
+        }
+      : null,
   })
 
   if (error) throw error
@@ -58,6 +72,7 @@ export async function previewSale(
 export type CreateSaleInput = {
   items: SaleItemInput[]
   promotionIds: string[]
+  linePromotion: LinePromotionTarget | null
   paymentMethod: PaymentMethod
   reference: string
   tip: number
@@ -68,6 +83,13 @@ export async function createSale(input: CreateSaleInput): Promise<string> {
   const { data, error } = await supabase.rpc('create_sale', {
     p_items: toRpcItems(input.items),
     p_promotion_ids: input.promotionIds,
+    p_line_promotion: input.linePromotion
+      ? {
+          promotion_id: input.linePromotion.promotionId,
+          product_id: input.linePromotion.productId,
+          tier: input.linePromotion.tier,
+        }
+      : null,
     p_payment_method: input.paymentMethod,
     p_payment_reference: input.reference,
     p_tip: input.tip,
@@ -191,6 +213,8 @@ export type UpdatePromotionInput = {
   automatic: boolean
   active: boolean
   sortOrder: number
+  lineTargeted: boolean
+  maxPerOrder: number | null
 }
 
 export async function upsertPromotion(input: UpdatePromotionInput): Promise<Promotion> {
@@ -206,6 +230,8 @@ export async function upsertPromotion(input: UpdatePromotionInput): Promise<Prom
     p_automatic: input.automatic,
     p_active: input.active,
     p_sort_order: input.sortOrder,
+    p_line_targeted: input.lineTargeted,
+    p_max_per_order: input.maxPerOrder,
   })
 
   if (error) throw error

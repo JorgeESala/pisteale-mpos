@@ -498,6 +498,8 @@ export type Promotion = {
   automatic: boolean
   active: boolean
   sort_order: number
+  line_targeted: boolean
+  max_per_order: number | null
   created_by: string | null
   created_at: string
   updated_at: string
@@ -507,6 +509,7 @@ export type SalePromotionApplication = {
   promotion_id: string
   promotion_name: string
   automatic: boolean
+  line_targeted: boolean
   bundle_qty: number
   applications: number
   gross_amount: number
@@ -519,6 +522,7 @@ export type OrderPromotion = {
   promotion_id: string | null
   promotion_name: string
   automatic: boolean
+  line_targeted: boolean
   bundle_qty: number
   applications: number
   gross_amount: number
@@ -862,13 +866,18 @@ export type Database = {
         Returns: undefined
       }
       preview_sale: {
-        Args: { p_items: Json; p_promotion_ids: string[] }
+        Args: {
+          p_items: Json
+          p_promotion_ids: string[]
+          p_line_promotion: Json | null
+        }
         Returns: SalePreview
       }
       create_sale: {
         Args: {
           p_items: Json
           p_promotion_ids: string[]
+          p_line_promotion: Json | null
           p_payment_method: PaymentMethod
           p_payment_reference: string
           p_tip: number
@@ -889,6 +898,8 @@ export type Database = {
           p_automatic: boolean
           p_active: boolean
           p_sort_order: number
+          p_line_targeted: boolean
+          p_max_per_order: number | null
         }
         Returns: Promotion
       }

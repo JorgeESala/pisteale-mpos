@@ -11,7 +11,14 @@ import {
   saleLineTotal,
   saleSubtotal,
 } from './sales-cart'
-import { createSale, fetchOrders, fetchPromotions, fetchSaleProducts, previewSale } from './queries'
+import {
+  createSale,
+  fetchOrders,
+  fetchPromotions,
+  fetchSaleProducts,
+  previewSale,
+  type LinePromotionTarget,
+} from './queries'
 import { warningText } from './sales-warnings'
 
 const paymentMethodLabels: Record<PaymentMethod, string> = {
@@ -54,6 +61,7 @@ export function SalesPage() {
   const [tip, setTip] = useState(0)
   const [notes, setNotes] = useState('')
   const [selectedPromotionIds, setSelectedPromotionIds] = useState<string[]>([])
+  const [linePromotion, setLinePromotion] = useState<LinePromotionTarget | null>(null)
   const [warnings, setWarnings] = useState<SaleWarning[]>([])
   const [showWarnings, setShowWarnings] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -67,8 +75,13 @@ export function SalesPage() {
   }))
   const subtotal = saleSubtotal(cart)
   const previewQuery = useQuery({
-    queryKey: ['sale_preview', JSON.stringify(saleItems), selectedPromotionIds.join(',')],
-    queryFn: () => previewSale(saleItems, selectedPromotionIds),
+    queryKey: [
+      'sale_preview',
+      JSON.stringify(saleItems),
+      selectedPromotionIds.join(','),
+      JSON.stringify(linePromotion),
+    ],
+    queryFn: () => previewSale(saleItems, selectedPromotionIds, linePromotion),
     enabled: cart.length > 0,
   })
   const gross = previewQuery.data?.gross_total ?? subtotal
@@ -76,7 +89,10 @@ export function SalesPage() {
   const netSubtotal = previewQuery.data?.subtotal ?? subtotal
   const total = Math.round((netSubtotal + tip) * 100) / 100
   const manualPromotions = (promotionsQuery.data ?? []).filter(
-    (promotion) => promotion.active && !promotion.automatic,
+    (promotion) => promotion.active && !promotion.automatic && !promotion.line_targeted,
+  )
+  const linePromotionRule = (promotionsQuery.data ?? []).find(
+    (promotion) => promotion.active && promotion.line_targeted,
   )
   const appliedPromotionIds = new Set(
     (previewQuery.data?.promotions ?? []).map((promotion) => promotion.promotion_id),
@@ -87,6 +103,7 @@ export function SalesPage() {
       createSale({
         items: saleItems,
         promotionIds: selectedPromotionIds,
+        linePromotion,
         paymentMethod,
         reference,
         tip,
@@ -103,6 +120,7 @@ export function SalesPage() {
       void queryClient.invalidateQueries({ queryKey: ['bottle_movements'] })
       setCart([])
       setSelectedPromotionIds([])
+      setLinePromotion(null)
       setWarnings([])
       setShowWarnings(false)
       setTip(0)
@@ -140,7 +158,30 @@ export function SalesPage() {
   }
 
   function removeLine(index: number) {
+    const removed = cart[index]
+    if (
+      removed &&
+      linePromotion?.productId === removed.productId &&
+      linePromotion.tier === removed.tier
+    ) {
+      setLinePromotion(null)
+    }
     setCart((current) => current.filter((_, lineIndex) => lineIndex !== index))
+  }
+
+  function toggleLinePromotion(line: SaleCartLine) {
+    if (!linePromotionRule || line.tier !== 'normal') return
+
+    setShowWarnings(false)
+    setLinePromotion((current) =>
+      current?.productId === line.productId && current.tier === line.tier
+        ? null
+        : {
+            promotionId: linePromotionRule.id,
+            productId: line.productId,
+            tier: line.tier,
+          },
+    )
   }
 
   async function completeSale() {
@@ -326,15 +367,33 @@ export function SalesPage() {
                 {tierLabels[line.tier]} · {line.qty} × {formatCurrency(line.unitPrice)}
               </p>
             </div>
-            <div className="flex shrink-0 items-center gap-3">
+            <div className="flex shrink-0 flex-col items-end gap-2">
               <p className="text-sm font-semibold">{formatCurrency(saleLineTotal(line))}</p>
-              <button
-                type="button"
-                onClick={() => removeLine(index)}
-                className="rounded-lg border border-red-500/40 px-2 py-1 text-xs text-red-300"
-              >
-                Quitar
-              </button>
+              <div className="flex flex-wrap justify-end gap-2">
+                {linePromotionRule && line.tier === 'normal' ? (
+                  <button
+                    type="button"
+                    onClick={() => toggleLinePromotion(line)}
+                    className={`rounded-lg border px-2 py-1 text-xs ${
+                      linePromotion?.productId === line.productId &&
+                      linePromotion.tier === line.tier
+                        ? 'border-brand-400 bg-brand-400/10 text-brand-200'
+                        : 'border-neutral-700 text-neutral-300'
+                    }`}
+                  >
+                    {linePromotion?.productId === line.productId && linePromotion.tier === line.tier
+                      ? 'Quitar precio socio'
+                      : 'Precio socio'}
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => removeLine(index)}
+                  className="rounded-lg border border-red-500/40 px-2 py-1 text-xs text-red-300"
+                >
+                  Quitar
+                </button>
+              </div>
             </div>
           </div>
         ))}
@@ -382,25 +441,28 @@ export function SalesPage() {
       <section className="space-y-3 rounded-2xl border border-neutral-800 bg-neutral-900 p-4">
         <h2 className="font-semibold">Promociones</h2>
 
-        {previewQuery.data?.promotions
-          .filter((promotion) => promotion.automatic)
-          .map((promotion) => (
-            <div
-              key={promotion.promotion_id}
-              className="flex items-center justify-between gap-3 rounded-xl border border-brand-400/30 bg-brand-400/10 p-3 text-sm"
-            >
-              <div>
-                <p className="font-medium text-brand-200">{promotion.promotion_name}</p>
-                <p className="text-xs text-neutral-400">
-                  Automática · {promotion.applications}{' '}
-                  {promotion.applications === 1 ? 'aplicación' : 'aplicaciones'}
-                </p>
-              </div>
-              <span className="font-semibold text-green-300">
-                -{formatCurrency(promotion.discount_amount)}
-              </span>
+        {previewQuery.data?.promotions.map((promotion) => (
+          <div
+            key={promotion.promotion_id}
+            className="flex items-center justify-between gap-3 rounded-xl border border-brand-400/30 bg-brand-400/10 p-3 text-sm"
+          >
+            <div>
+              <p className="font-medium text-brand-200">{promotion.promotion_name}</p>
+              <p className="text-xs text-neutral-400">
+                {promotion.line_targeted
+                  ? 'Precio socio'
+                  : promotion.automatic
+                    ? 'Automática'
+                    : 'Manual'}{' '}
+                · {promotion.applications}{' '}
+                {promotion.applications === 1 ? 'aplicación' : 'aplicaciones'}
+              </p>
             </div>
-          ))}
+            <span className="font-semibold text-green-300">
+              -{formatCurrency(promotion.discount_amount)}
+            </span>
+          </div>
+        ))}
 
         {manualPromotions.length === 0 ? (
           <p className="text-sm text-neutral-500">No hay promociones manuales activas.</p>
