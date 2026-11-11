@@ -34,7 +34,7 @@ export function useFormDraft<T extends FieldValues>({
       if (timer.current !== null) {
         window.clearTimeout(timer.current)
       }
-      timer.current = window.setTimeout(flush, 500)
+      timer.current = window.setTimeout(flush, 250)
     }
 
     const subscription = watch((values) => {
@@ -51,6 +51,8 @@ export function useFormDraft<T extends FieldValues>({
 
     document.addEventListener('visibilitychange', handleVisibility)
     window.addEventListener('pagehide', handlePageHide)
+    window.addEventListener('beforeunload', handlePageHide)
+    window.addEventListener('freeze', handlePageHide)
 
     return () => {
       if (timer.current !== null) {
@@ -59,6 +61,8 @@ export function useFormDraft<T extends FieldValues>({
       subscription.unsubscribe()
       document.removeEventListener('visibilitychange', handleVisibility)
       window.removeEventListener('pagehide', handlePageHide)
+      window.removeEventListener('beforeunload', handlePageHide)
+      window.removeEventListener('freeze', handlePageHide)
       flush()
     }
   }, [enabled, readyRef, storageKey, watch])

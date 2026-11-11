@@ -4,11 +4,11 @@ export type FormDraft<T> = {
   values: T
 }
 
-const DRAFT_PREFIX = 'pisteale:form-draft:'
+export const FORM_DRAFT_PREFIX = 'pisteale:form-draft:'
 export const FORM_DRAFT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
 
 export function formDraftKey(scope: string, userId: string, entityId: string) {
-  return `${DRAFT_PREFIX}${scope}:${userId}:${entityId}`
+  return `${FORM_DRAFT_PREFIX}${scope}:${userId}:${entityId}`
 }
 
 export function loadFormDraft<T>(key: string, maxAgeMs = FORM_DRAFT_MAX_AGE_MS): T | null {
