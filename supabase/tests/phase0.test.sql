@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select extensions.plan(140);
+select extensions.plan(163);
 
 delete from auth.users
 where id in (
@@ -2123,11 +2123,373 @@ select extensions.is(
 
 reset role;
 
+set local role authenticated;
+select set_config(
+  'request.jwt.claim.sub',
+  '11111111-1111-1111-1111-111111111111',
+  true
+);
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"11111111-1111-1111-1111-111111111111","role":"authenticated"}',
+  true
+);
+
+select extensions.ok(
+  public.create_event(
+    'Test Evento Parque',
+    'Parque central',
+    current_date,
+    '17:00'::time,
+    '22:00'::time,
+    true,
+    2,
+    180,
+    500,
+    ''
+  ) is not null,
+  'admin creates event'
+);
+
+select extensions.ok(
+  (
+    select folio like 'EVT-%'
+    from public.v_events
+    where name = 'Test Evento Parque'
+  ),
+  'event folio uses EVT prefix'
+);
+
+select extensions.is(
+  (select profit from public.v_events where name = 'Test Evento Parque'),
+  0::numeric,
+  'new event has zero profit'
+);
+
+select public.create_event_sale(
+  'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid,
+  (select id from public.events where name = 'Test Evento Parque'),
+  jsonb_build_array(
+    jsonb_build_object(
+      'product_id', null,
+      'product_name', 'Mojito',
+      'quantity', 3,
+      'unit_price', 100,
+      'promotion_eligible', true
+    )
+  ),
+  true,
+  'cash',
+  '',
+  '2026-11-14T20:00:00-05:00'::timestamptz
+);
+
+select extensions.is(
+  (
+    select total
+    from public.event_sales
+    where client_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid
+  ),
+  280::numeric,
+  'event sale applies the bundle promotion'
+);
+
+select extensions.is(
+  (
+    select discount_total
+    from public.event_sales
+    where client_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid
+  ),
+  20::numeric,
+  'event sale stores the promotion discount'
+);
+
+select extensions.is(
+  (select sales_total from public.v_events where name = 'Test Evento Parque'),
+  280::numeric,
+  'event view totals sales'
+);
+
+select extensions.is(
+  (select drinks_count from public.v_events where name = 'Test Evento Parque'),
+  3,
+  'event view counts drinks'
+);
+
+select extensions.is(
+  (
+    select count(*)::integer
+    from public.event_sale_items
+    where event_sale_id = (
+      select id
+      from public.event_sales
+      where client_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid
+    )
+  ),
+  1,
+  'event sale stores its items'
+);
+
+select public.create_event_sale(
+  'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid,
+  (select id from public.events where name = 'Test Evento Parque'),
+  jsonb_build_array(
+    jsonb_build_object(
+      'product_id', null,
+      'product_name', 'Mojito',
+      'quantity', 3,
+      'unit_price', 100,
+      'promotion_eligible', true
+    )
+  ),
+  true,
+  'cash',
+  '',
+  '2026-11-14T20:00:00-05:00'::timestamptz
+);
+
+select extensions.is(
+  (
+    select count(*)::integer
+    from public.event_sales
+    where event_id = (select id from public.events where name = 'Test Evento Parque')
+  ),
+  1,
+  'duplicate client id does not create another sale'
+);
+
+select public.create_event_sale(
+  'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'::uuid,
+  (select id from public.events where name = 'Test Evento Parque'),
+  jsonb_build_array(
+    jsonb_build_object(
+      'product_id', null,
+      'product_name', 'Paloma',
+      'quantity', 2,
+      'unit_price', 100,
+      'promotion_eligible', true
+    )
+  ),
+  false,
+  'transfer',
+  '',
+  '2026-11-14T21:00:00-05:00'::timestamptz
+);
+
+select extensions.is(
+  (
+    select total
+    from public.event_sales
+    where client_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'::uuid
+  ),
+  200::numeric,
+  'event sale can skip the promotion'
+);
+
+select public.upsert_event_expense(
+  null,
+  'cccccccc-cccc-cccc-cccc-cccccccccccc'::uuid,
+  (select id from public.events where name = 'Test Evento Parque'),
+  'supplies',
+  'Hielo',
+  50,
+  'cash',
+  '',
+  now(),
+  ''
+);
+
+select extensions.is(
+  (
+    select amount
+    from public.event_expenses
+    where client_id = 'cccccccc-cccc-cccc-cccc-cccccccccccc'::uuid
+  ),
+  50::numeric,
+  'event expense is stored'
+);
+
+select public.upsert_event_expense(
+  null,
+  'cccccccc-cccc-cccc-cccc-cccccccccccc'::uuid,
+  (select id from public.events where name = 'Test Evento Parque'),
+  'supplies',
+  'Hielo',
+  50,
+  'cash',
+  '',
+  now(),
+  ''
+);
+
+select extensions.is(
+  (
+    select count(*)::integer
+    from public.event_expenses
+    where event_id = (select id from public.events where name = 'Test Evento Parque')
+  ),
+  1,
+  'duplicate expense client id is idempotent'
+);
+
+select extensions.is(
+  (select expenses_total from public.v_events where name = 'Test Evento Parque'),
+  50::numeric,
+  'event view totals expenses'
+);
+
+select extensions.is(
+  (select profit from public.v_events where name = 'Test Evento Parque'),
+  430::numeric,
+  'event view calculates profit'
+);
+
+select extensions.is(
+  (select margin_percent from public.v_events where name = 'Test Evento Parque'),
+  89.6::numeric,
+  'event view calculates margin'
+);
+
+select public.set_event_status(
+  (select id from public.events where name = 'Test Evento Parque'),
+  'closed'
+);
+
+select extensions.is(
+  (select status from public.v_events where name = 'Test Evento Parque'),
+  'closed',
+  'event can be closed'
+);
+
+select extensions.throws_ok(
+  $sql$
+    select public.create_event_sale(
+      'dddddddd-dddd-dddd-dddd-dddddddddddd'::uuid,
+      (select id from public.events where name = 'Test Evento Parque'),
+      jsonb_build_array(
+        jsonb_build_object(
+          'product_id', null,
+          'product_name', 'Mojito',
+          'quantity', 1,
+          'unit_price', 100,
+          'promotion_eligible', true
+        )
+      ),
+      true,
+      'cash',
+      '',
+      now()
+    )
+  $sql$,
+  '22023',
+  'El evento está cerrado',
+  'closed event rejects new sales'
+);
+
+select public.set_event_status(
+  (select id from public.events where name = 'Test Evento Parque'),
+  'open'
+);
+
+reset role;
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claim.sub',
+  '22222222-2222-2222-2222-222222222222',
+  true
+);
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"22222222-2222-2222-2222-222222222222","role":"authenticated"}',
+  true
+);
+
+select extensions.throws_ok(
+  $sql$
+    select public.delete_event_sale((
+      select id
+      from public.event_sales
+      where client_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid
+    ))
+  $sql$,
+  '42501',
+  'No autorizado',
+  'operator cannot delete event sales'
+);
+
+reset role;
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claim.sub',
+  '11111111-1111-1111-1111-111111111111',
+  true
+);
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"11111111-1111-1111-1111-111111111111","role":"authenticated"}',
+  true
+);
+
+select public.delete_event_sale((
+  select id
+  from public.event_sales
+  where client_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'::uuid
+));
+
+select extensions.is(
+  (
+    select count(*)::integer
+    from public.event_sales
+    where event_id = (select id from public.events where name = 'Test Evento Parque')
+  ),
+  1,
+  'admin deletes an event sale'
+);
+
+select extensions.is(
+  (select sales_total from public.v_events where name = 'Test Evento Parque'),
+  280::numeric,
+  'deleted event sale no longer counts'
+);
+
+select public.delete_event_expense((
+  select id
+  from public.event_expenses
+  where client_id = 'cccccccc-cccc-cccc-cccc-cccccccccccc'::uuid
+));
+
+select extensions.is(
+  (
+    select count(*)::integer
+    from public.event_expenses
+    where event_id = (select id from public.events where name = 'Test Evento Parque')
+  ),
+  0,
+  'admin deletes an event expense'
+);
+
+select extensions.is(
+  (select profit from public.v_events where name = 'Test Evento Parque'),
+  280::numeric,
+  'profit is recalculated after deleting the expense'
+);
+
+reset role;
+
 reset role;
 
 set local role anon;
 select set_config('request.jwt.claim.sub', '', true);
 select set_config('request.jwt.claims', '{"role":"anon"}', true);
+
+select extensions.throws_ok(
+  $sql$select count(*) from public.events$sql$,
+  '42501',
+  'permission denied for table events',
+  'anon cannot read events'
+);
 
 select extensions.throws_ok(
   $sql$select count(*) from public.products$sql$,

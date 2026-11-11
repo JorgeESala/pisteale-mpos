@@ -126,6 +126,12 @@ export function DashboardPage() {
             Pedidos
           </Link>
           <Link
+            to="/eventos"
+            className="rounded-xl border border-neutral-700 px-3 py-3 text-center text-neutral-200 transition hover:border-neutral-500"
+          >
+            Eventos
+          </Link>
+          <Link
             to="/catalogo"
             className="rounded-xl border border-neutral-700 px-3 py-3 text-center text-neutral-200 transition hover:border-neutral-500"
           >

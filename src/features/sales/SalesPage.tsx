@@ -1,6 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { useAuth } from '@/features/auth/auth-context'
+import { formDraftKey } from '@/lib/form-drafts'
+import { useDraftState } from '@/lib/use-draft-state'
 import { formatCurrency } from '@/lib/format'
 import type { OrderTier, PaymentMethod, Promotion, SaleWarning } from '@/types/database'
 import { formatDateTime } from '@/features/inventory/inventory-utils'
@@ -33,9 +36,30 @@ const tierLabels: Record<OrderTier, string> = {
   premium: 'Premium',
 }
 
+type SaleDraft = {
+  cart: SaleCartLine[]
+  paymentMethod: PaymentMethod
+  reference: string
+  tip: number
+  notes: string
+  selectedPromotionIds: string[]
+  linePromotion: LinePromotionTarget | null
+}
+
+const emptySaleDraft: SaleDraft = {
+  cart: [],
+  paymentMethod: 'cash',
+  reference: '',
+  tip: 0,
+  notes: '',
+  selectedPromotionIds: [],
+  linePromotion: null,
+}
+
 export function SalesPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const { profile } = useAuth()
 
   const productsQuery = useQuery({
     queryKey: ['sale_products'],
@@ -52,16 +76,21 @@ export function SalesPage() {
     queryFn: fetchPromotions,
   })
 
-  const [cart, setCart] = useState<SaleCartLine[]>([])
+  const draftKey = profile?.id ? formDraftKey('sale', profile.id, 'nuevo') : null
+  const {
+    value: draft,
+    setValue: setDraft,
+    restored: draftRestored,
+    discard: discardDraft,
+  } = useDraftState<SaleDraft>({
+    storageKey: draftKey,
+    initialValue: emptySaleDraft,
+  })
+  const { cart, paymentMethod, reference, tip, notes, selectedPromotionIds, linePromotion } = draft
+
   const [selectedProductId, setSelectedProductId] = useState('')
   const [selectedTier, setSelectedTier] = useState<OrderTier>('normal')
   const [qty, setQty] = useState(1)
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash')
-  const [reference, setReference] = useState('')
-  const [tip, setTip] = useState(0)
-  const [notes, setNotes] = useState('')
-  const [selectedPromotionIds, setSelectedPromotionIds] = useState<string[]>([])
-  const [linePromotion, setLinePromotion] = useState<LinePromotionTarget | null>(null)
   const [warnings, setWarnings] = useState<SaleWarning[]>([])
   const [showWarnings, setShowWarnings] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -118,14 +147,9 @@ export function SalesPage() {
       void queryClient.invalidateQueries({ queryKey: ['bottle_openings'] })
       void queryClient.invalidateQueries({ queryKey: ['bottle_opening'] })
       void queryClient.invalidateQueries({ queryKey: ['bottle_movements'] })
-      setCart([])
-      setSelectedPromotionIds([])
-      setLinePromotion(null)
+      discardDraft()
       setWarnings([])
       setShowWarnings(false)
-      setTip(0)
-      setReference('')
-      setNotes('')
       navigate(`/pedidos/${orderId}`)
     },
     onError: (mutationError) => setError(mutationError.message),
@@ -151,7 +175,10 @@ export function SalesPage() {
       return
     }
 
-    setCart((current) => addSaleLine(current, selectedProduct, selectedTier, qty))
+    setDraft((current) => ({
+      ...current,
+      cart: addSaleLine(current.cart, selectedProduct, selectedTier, qty),
+    }))
     setSelectedProductId('')
     setSelectedTier('normal')
     setQty(1)
@@ -159,29 +186,38 @@ export function SalesPage() {
 
   function removeLine(index: number) {
     const removed = cart[index]
-    if (
-      removed &&
-      linePromotion?.productId === removed.productId &&
-      linePromotion.tier === removed.tier
-    ) {
-      setLinePromotion(null)
-    }
-    setCart((current) => current.filter((_, lineIndex) => lineIndex !== index))
+    setDraft((current) => {
+      const nextLinePromotion =
+        removed &&
+        current.linePromotion?.productId === removed.productId &&
+        current.linePromotion.tier === removed.tier
+          ? null
+          : current.linePromotion
+
+      return {
+        ...current,
+        cart: current.cart.filter((_, lineIndex) => lineIndex !== index),
+        linePromotion: nextLinePromotion,
+      }
+    })
   }
 
   function toggleLinePromotion(line: SaleCartLine) {
     if (!linePromotionRule || line.tier !== 'normal') return
 
     setShowWarnings(false)
-    setLinePromotion((current) =>
-      current?.productId === line.productId && current.tier === line.tier
-        ? null
-        : {
-            promotionId: linePromotionRule.id,
-            productId: line.productId,
-            tier: line.tier,
-          },
-    )
+    setDraft((current) => ({
+      ...current,
+      linePromotion:
+        current.linePromotion?.productId === line.productId &&
+        current.linePromotion.tier === line.tier
+          ? null
+          : {
+              promotionId: linePromotionRule.id,
+              productId: line.productId,
+              tier: line.tier,
+            },
+    }))
   }
 
   async function completeSale() {
@@ -218,11 +254,12 @@ export function SalesPage() {
 
   function togglePromotion(promotion: Promotion) {
     setShowWarnings(false)
-    setSelectedPromotionIds((current) =>
-      current.includes(promotion.id)
-        ? current.filter((id) => id !== promotion.id)
-        : [...current, promotion.id],
-    )
+    setDraft((current) => ({
+      ...current,
+      selectedPromotionIds: current.selectedPromotionIds.includes(promotion.id)
+        ? current.selectedPromotionIds.filter((id) => id !== promotion.id)
+        : [...current.selectedPromotionIds, promotion.id],
+    }))
   }
 
   if (productsQuery.isLoading || ordersQuery.isLoading || promotionsQuery.isLoading) {
@@ -268,6 +305,21 @@ export function SalesPage() {
             La venta no se bloquea por falta de stock; se muestra una advertencia antes de cobrar.
           </p>
         </div>
+
+        {draftRestored ? (
+          <div className="flex items-start justify-between gap-3 rounded-xl border border-brand-400/40 bg-brand-400/10 p-3 text-sm">
+            <p className="text-brand-100">
+              Borrador restaurado. Puedes continuar donde lo dejaste.
+            </p>
+            <button
+              type="button"
+              onClick={discardDraft}
+              className="shrink-0 rounded-lg border border-brand-400/40 px-2 py-1 text-xs text-brand-200"
+            >
+              Descartar
+            </button>
+          </div>
+        ) : null}
 
         <div>
           <label htmlFor="saleProduct" className="mb-1.5 block text-sm text-neutral-300">
@@ -421,7 +473,12 @@ export function SalesPage() {
               min="0"
               step="0.01"
               value={tip}
-              onChange={(event) => setTip(Number(event.target.value) || 0)}
+              onChange={(event) =>
+                setDraft((current) => ({
+                  ...current,
+                  tip: Number(event.target.value) || 0,
+                }))
+              }
               className="w-28 rounded-lg border border-neutral-700 bg-neutral-950 px-2 py-1.5 text-right text-sm text-neutral-100 outline-none focus:border-brand-400"
             />
           </div>
@@ -523,7 +580,12 @@ export function SalesPage() {
             <select
               id="paymentMethod"
               value={paymentMethod}
-              onChange={(event) => setPaymentMethod(event.target.value as PaymentMethod)}
+              onChange={(event) =>
+                setDraft((current) => ({
+                  ...current,
+                  paymentMethod: event.target.value as PaymentMethod,
+                }))
+              }
               className="w-full rounded-xl border border-neutral-700 bg-neutral-950 px-3 py-3 text-base text-neutral-100 outline-none transition focus:border-brand-400"
             >
               {Object.entries(paymentMethodLabels).map(([value, label]) => (
@@ -543,7 +605,9 @@ export function SalesPage() {
               type="text"
               placeholder="Opcional"
               value={reference}
-              onChange={(event) => setReference(event.target.value)}
+              onChange={(event) =>
+                setDraft((current) => ({ ...current, reference: event.target.value }))
+              }
               className="w-full rounded-xl border border-neutral-700 bg-neutral-950 px-4 py-3 text-base text-neutral-100 outline-none transition focus:border-brand-400"
             />
           </div>
@@ -558,7 +622,7 @@ export function SalesPage() {
             rows={2}
             placeholder="Opcional"
             value={notes}
-            onChange={(event) => setNotes(event.target.value)}
+            onChange={(event) => setDraft((current) => ({ ...current, notes: event.target.value }))}
             className="w-full rounded-xl border border-neutral-700 bg-neutral-950 px-4 py-3 text-base text-neutral-100 outline-none transition focus:border-brand-400"
           />
         </div>

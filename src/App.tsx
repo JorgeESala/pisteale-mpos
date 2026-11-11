@@ -14,6 +14,9 @@ import { InventoryItemFormPage } from '@/features/catalog/InventoryItemFormPage'
 import { InventoryItemsPage } from '@/features/catalog/InventoryItemsPage'
 import { ProductFormPage } from '@/features/catalog/ProductFormPage'
 import { DashboardPage } from '@/features/dashboard/DashboardPage'
+import { EventDetailPage } from '@/features/events/EventDetailPage'
+import { EventFormPage } from '@/features/events/EventFormPage'
+import { EventsPage } from '@/features/events/EventsPage'
 import { BottleDetailPage } from '@/features/inventory/BottleDetailPage'
 import { BottlesPage } from '@/features/inventory/BottlesPage'
 import { MovementsPage } from '@/features/inventory/MovementsPage'
@@ -225,6 +228,46 @@ export default function App() {
                 <ProtectedRoute>
                   <AppShell>
                     <OrderDetailPage />
+                  </AppShell>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/eventos"
+              element={
+                <ProtectedRoute>
+                  <AppShell>
+                    <EventsPage />
+                  </AppShell>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/eventos/nuevo"
+              element={
+                <ProtectedRoute>
+                  <AppShell>
+                    <EventFormPage />
+                  </AppShell>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/eventos/:id"
+              element={
+                <ProtectedRoute>
+                  <AppShell>
+                    <EventDetailPage />
+                  </AppShell>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/eventos/:id/editar"
+              element={
+                <ProtectedRoute>
+                  <AppShell>
+                    <EventFormPage />
                   </AppShell>
                 </ProtectedRoute>
               }

@@ -6,7 +6,7 @@ const navItems = [
   { label: 'Inicio', href: '/', enabled: true },
   { label: 'Pedidos', href: '/pedidos', enabled: true },
   { label: 'Inventario', href: '/insumos/stock', enabled: true },
-  { label: 'Eventos', href: '/eventos', enabled: false },
+  { label: 'Eventos', href: '/eventos', enabled: true },
   { label: 'Reportes', href: '/reportes', enabled: true },
 ]
 

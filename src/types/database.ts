@@ -543,6 +543,116 @@ export type SalePreview = {
   promotions: SalePromotionApplication[]
 }
 
+export type EventStatus = 'open' | 'closed'
+
+export type EventExpenseCategory =
+  'supplies' | 'ice' | 'transport' | 'staff' | 'permits' | 'rent' | 'other'
+
+export type Event = {
+  id: string
+  folio: string
+  name: string
+  venue: string
+  event_date: string
+  start_time: string | null
+  end_time: string | null
+  status: EventStatus
+  promotion_enabled: boolean
+  bundle_qty: number
+  bundle_price: number
+  opening_cash: number
+  notes: string
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type EventView = Event & {
+  created_by_name: string | null
+  sales_count: number
+  drinks_count: number
+  gross_sales: number
+  discount_total: number
+  sales_total: number
+  expenses_total: number
+  expenses_count: number
+  profit: number
+  margin_percent: number | null
+}
+
+export type EventSale = {
+  id: string
+  client_id: string
+  event_id: string
+  sold_at: string
+  payment_method: PaymentMethod
+  gross_total: number
+  discount_total: number
+  total: number
+  notes: string
+  created_by: string | null
+  created_at: string
+}
+
+export type EventSaleView = EventSale & {
+  event_folio: string
+  event_name: string
+  event_date: string
+  created_by_name: string | null
+  item_count: number
+  drinks_count: number
+}
+
+export type EventSaleItem = {
+  id: string
+  event_sale_id: string
+  product_id: string | null
+  product_name: string
+  quantity: number
+  unit_price: number
+  line_total: number
+  promotion_eligible: boolean
+  notes: string
+  created_at: string
+}
+
+export type EventSaleItemView = EventSaleItem & {
+  event_id: string
+  event_folio: string
+  sold_at: string
+}
+
+export type EventExpense = {
+  id: string
+  client_id: string
+  event_id: string
+  category: EventExpenseCategory
+  description: string
+  amount: number
+  payment_method: PaymentMethod
+  reference: string
+  spent_at: string
+  notes: string
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type EventExpenseView = EventExpense & {
+  event_folio: string
+  event_name: string
+  created_by_name: string | null
+}
+
+export type EventProduct = {
+  id: string
+  name: string
+  price: number
+  premium_price: number | null
+  kind: ProductKind
+  is_alcoholic: boolean
+}
+
 export type ProductCost = {
   product_id: string
   name: string
@@ -705,6 +815,30 @@ export type Database = {
         Update: never
         Relationships: []
       }
+      events: {
+        Row: Event
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      event_sales: {
+        Row: EventSale
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      event_sale_items: {
+        Row: EventSaleItem
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      event_expenses: {
+        Row: EventExpense
+        Insert: never
+        Update: never
+        Relationships: []
+      }
     }
     Views: {
       v_ice_daily_records: {
@@ -757,6 +891,22 @@ export type Database = {
       }
       v_order_promotions: {
         Row: OrderPromotionView
+        Relationships: []
+      }
+      v_events: {
+        Row: EventView
+        Relationships: []
+      }
+      v_event_sales: {
+        Row: EventSaleView
+        Relationships: []
+      }
+      v_event_sale_items: {
+        Row: EventSaleItemView
+        Relationships: []
+      }
+      v_event_expenses: {
+        Row: EventExpenseView
         Relationships: []
       }
       v_inventory_group_costs: {
@@ -884,6 +1034,76 @@ export type Database = {
           p_notes: string
         }
         Returns: string
+      }
+      create_event: {
+        Args: {
+          p_name: string
+          p_venue: string
+          p_event_date: string
+          p_start_time: string | null
+          p_end_time: string | null
+          p_promotion_enabled: boolean
+          p_bundle_qty: number
+          p_bundle_price: number
+          p_opening_cash: number
+          p_notes: string
+        }
+        Returns: string
+      }
+      update_event: {
+        Args: {
+          p_id: string
+          p_name: string
+          p_venue: string
+          p_event_date: string
+          p_start_time: string | null
+          p_end_time: string | null
+          p_promotion_enabled: boolean
+          p_bundle_qty: number
+          p_bundle_price: number
+          p_opening_cash: number
+          p_notes: string
+        }
+        Returns: string
+      }
+      set_event_status: {
+        Args: { p_id: string; p_status: EventStatus }
+        Returns: string
+      }
+      create_event_sale: {
+        Args: {
+          p_client_id: string
+          p_event_id: string
+          p_items: Json
+          p_apply_promotion: boolean
+          p_payment_method: PaymentMethod
+          p_notes: string
+          p_sold_at: string
+        }
+        Returns: string
+      }
+      delete_event_sale: {
+        Args: { p_id: string }
+        Returns: undefined
+      }
+      upsert_event_expense: {
+        Args: {
+          p_id: string | null
+          p_client_id: string
+          p_event_id: string
+          p_category: EventExpenseCategory
+          p_description: string
+          p_amount: number
+          p_payment_method: PaymentMethod
+          p_reference: string
+          p_spent_at: string
+          p_notes: string
+        }
+        Returns: string
+      }
+      delete_event_expense: {
+        Args: { p_id: string }
+        Returns: undefined
       }
       upsert_promotion: {
         Args: {
