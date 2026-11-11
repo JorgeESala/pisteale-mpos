@@ -66,11 +66,16 @@ export function EventSyncProvider({ children }: { children: ReactNode }) {
     if (!userId) {
       setPendingSales([])
       setPendingExpenses([])
+      setSyncError(null)
       return
     }
 
     const nextSales = loadPendingEventSales(userId)
     const nextExpenses = loadPendingEventExpenses(userId)
+
+    if (nextSales.length === 0 && nextExpenses.length === 0) {
+      setSyncError(null)
+    }
 
     setPendingSales((current) => (sameQueue(current, nextSales) ? current : nextSales))
     setPendingExpenses((current) => (sameQueue(current, nextExpenses) ? current : nextExpenses))
@@ -83,8 +88,10 @@ export function EventSyncProvider({ children }: { children: ReactNode }) {
   const syncNow = useCallback(async () => {
     if (!userId || !online || syncingRef.current) return
 
-    const sales = loadPendingEventSales(userId)
-    const expenses = loadPendingEventExpenses(userId)
+    const sales = loadPendingEventSales(userId).filter((sale) => sale.status === 'pending')
+    const expenses = loadPendingEventExpenses(userId).filter(
+      (expense) => expense.status === 'pending',
+    )
 
     if (sales.length === 0 && expenses.length === 0) return
 
@@ -100,15 +107,12 @@ export function EventSyncProvider({ children }: { children: ReactNode }) {
         items: sales,
         send: sendQueuedSale,
         onSuccess: (sale) => {
-          const removed = removePendingEventSale(userId, sale.clientId)
-          if (!removed) {
+          if (!removePendingEventSale(userId, sale.clientId)) {
             setSyncError('No se pudo actualizar la cola local de ventas.')
           }
-          return removed
         },
         onError: (sale, message) => {
           markPendingEventSaleError(userId, sale.clientId, message)
-          return true
         },
       })
 
@@ -126,15 +130,12 @@ export function EventSyncProvider({ children }: { children: ReactNode }) {
           items: expenses,
           send: sendQueuedExpense,
           onSuccess: (expense) => {
-            const removed = removePendingEventExpense(userId, expense.clientId)
-            if (!removed) {
+            if (!removePendingEventExpense(userId, expense.clientId)) {
               setSyncError('No se pudo actualizar la cola local de gastos.')
             }
-            return removed
           },
           onError: (expense, message) => {
             markPendingEventExpenseError(userId, expense.clientId, message)
-            return true
           },
         })
 

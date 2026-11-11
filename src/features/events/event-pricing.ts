@@ -16,6 +16,7 @@ export type EventSaleTotals = {
   grossTotal: number
   discountTotal: number
   total: number
+  limitExceeded: boolean
 }
 
 export const EVENT_SALE_MAX_LINE_QTY = 100
@@ -57,7 +58,7 @@ export function calculateEventSaleTotals(
   grossTotal = roundEventMoney(grossTotal)
 
   if (exceedsLimit || totalUnits > EVENT_SALE_MAX_TOTAL_UNITS) {
-    return { grossTotal, discountTotal: 0, total: grossTotal }
+    return { grossTotal, discountTotal: 0, total: grossTotal, limitExceeded: true }
   }
 
   const units: SaleUnit[] = []
@@ -74,7 +75,7 @@ export function calculateEventSaleTotals(
   const bundleQty = Math.trunc(promotion.bundleQty)
 
   if (!promotion.enabled || bundleQty < 2 || promotion.bundlePrice < 0) {
-    return { grossTotal, discountTotal: 0, total: grossTotal }
+    return { grossTotal, discountTotal: 0, total: grossTotal, limitExceeded: false }
   }
 
   const eligiblePrices = units
@@ -100,5 +101,5 @@ export function calculateEventSaleTotals(
   const total = roundEventMoney(promotionTotal + ineligibleTotal)
   const discountTotal = Math.max(0, roundEventMoney(grossTotal - total))
 
-  return { grossTotal, discountTotal, total }
+  return { grossTotal, discountTotal, total, limitExceeded: false }
 }

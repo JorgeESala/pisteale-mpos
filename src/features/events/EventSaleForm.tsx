@@ -193,30 +193,35 @@ export function EventSaleForm({ event, products, online, onSaleSaved }: EventSal
 
     setSubmitting(true)
 
-    const clientId = createClientId()
-    const input = {
-      clientId,
-      eventId: event.id,
-      items: draft.lines,
-      applyPromotion,
-      bundleQty: event.bundle_qty,
-      bundlePrice: event.bundle_price,
-      paymentMethod: draft.paymentMethod,
-      notes: draft.notes,
-      soldAt: new Date().toISOString(),
-    }
-
     try {
       if (!userId) {
         throw new Error('La sesión no está disponible. Vuelve a iniciar sesión.')
       }
 
+      const input = {
+        clientId: createClientId(),
+        eventId: event.id,
+        items: draft.lines,
+        applyPromotion,
+        bundleQty: event.bundle_qty,
+        bundlePrice: event.bundle_price,
+        paymentMethod: draft.paymentMethod,
+        notes: draft.notes,
+        soldAt: new Date().toISOString(),
+      }
+
       if (online) {
-        await createEventSale(input)
-        discard()
-        setMessage('Venta registrada.')
-        onSaleSaved(false)
-        return
+        try {
+          await createEventSale(input)
+          discard()
+          setMessage('Venta registrada.')
+          onSaleSaved(false)
+          return
+        } catch (onlineError) {
+          if (!isConnectivityError(onlineError)) {
+            throw onlineError
+          }
+        }
       }
 
       enqueueEventSale(userId, input)
@@ -224,22 +229,6 @@ export function EventSaleForm({ event, products, online, onSaleSaved }: EventSal
       setMessage('Venta guardada sin conexión. Se sincronizará al recuperar señal.')
       onSaleSaved(true)
     } catch (submitError) {
-      if (isConnectivityError(submitError) && userId) {
-        try {
-          enqueueEventSale(userId, input)
-          discard()
-          setMessage('Venta guardada sin conexión. Se sincronizará al recuperar señal.')
-          onSaleSaved(true)
-        } catch (queueError) {
-          setError(
-            queueError instanceof Error
-              ? queueError.message
-              : 'No se pudo guardar la venta en el teléfono.',
-          )
-        }
-        return
-      }
-
       setError(
         submitError instanceof Error ? submitError.message : 'No se pudo registrar la venta.',
       )
@@ -430,6 +419,11 @@ export function EventSaleForm({ event, products, online, onSaleSaved }: EventSal
           <span>Total</span>
           <span>{formatCurrency(totals.total)}</span>
         </div>
+        {totals.limitExceeded ? (
+          <p className="text-xs text-red-300">
+            Máximo {EVENT_SALE_MAX_LINE_QTY} por bebida y {EVENT_SALE_MAX_TOTAL_UNITS} por venta.
+          </p>
+        ) : null}
         {event.promotion_enabled ? (
           <label className="flex items-center gap-2 text-xs text-neutral-400">
             <input
@@ -503,7 +497,7 @@ export function EventSaleForm({ event, products, online, onSaleSaved }: EventSal
       <button
         type="button"
         onClick={() => void submitSale()}
-        disabled={submitting || draft.lines.length === 0}
+        disabled={submitting || draft.lines.length === 0 || totals.limitExceeded}
         className="w-full rounded-xl bg-brand-400 px-4 py-3 text-sm font-semibold text-neutral-950 transition hover:bg-brand-300 disabled:opacity-60"
       >
         {submitting ? 'Registrando…' : 'Registrar venta'}

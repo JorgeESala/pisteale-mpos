@@ -82,30 +82,35 @@ export function EventExpenseForm({ event, online, onExpenseSaved }: EventExpense
 
     setSubmitting(true)
 
-    const clientId = createClientId()
-    const input = {
-      clientId,
-      eventId: event.id,
-      category: draft.category,
-      description: draft.description,
-      amount,
-      paymentMethod: draft.paymentMethod,
-      reference: draft.reference,
-      spentAt: localDateTimeToIso(draft.spentAt),
-      notes: draft.notes,
-    }
-
     try {
       if (!userId) {
         throw new Error('La sesión no está disponible. Vuelve a iniciar sesión.')
       }
 
+      const input = {
+        clientId: createClientId(),
+        eventId: event.id,
+        category: draft.category,
+        description: draft.description,
+        amount,
+        paymentMethod: draft.paymentMethod,
+        reference: draft.reference,
+        spentAt: localDateTimeToIso(draft.spentAt),
+        notes: draft.notes,
+      }
+
       if (online) {
-        await createEventExpense(input)
-        discard()
-        setMessage('Gasto registrado.')
-        onExpenseSaved(false)
-        return
+        try {
+          await createEventExpense(input)
+          discard()
+          setMessage('Gasto registrado.')
+          onExpenseSaved(false)
+          return
+        } catch (onlineError) {
+          if (!isConnectivityError(onlineError)) {
+            throw onlineError
+          }
+        }
       }
 
       enqueueEventExpense(userId, input)
@@ -113,22 +118,6 @@ export function EventExpenseForm({ event, online, onExpenseSaved }: EventExpense
       setMessage('Gasto guardado sin conexión. Se sincronizará al recuperar señal.')
       onExpenseSaved(true)
     } catch (submitError) {
-      if (isConnectivityError(submitError) && userId) {
-        try {
-          enqueueEventExpense(userId, input)
-          discard()
-          setMessage('Gasto guardado sin conexión. Se sincronizará al recuperar señal.')
-          onExpenseSaved(true)
-        } catch (queueError) {
-          setError(
-            queueError instanceof Error
-              ? queueError.message
-              : 'No se pudo guardar el gasto en el teléfono.',
-          )
-        }
-        return
-      }
-
       setError(
         submitError instanceof Error ? submitError.message : 'No se pudo registrar el gasto.',
       )

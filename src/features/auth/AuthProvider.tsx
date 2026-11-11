@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { queryClient } from '@/lib/queryClient'
 import { supabase } from '@/lib/supabase'
-import { clearUserStorage } from '@/lib/user-storage'
+import { clearUserCaches } from '@/lib/user-storage'
 import type { Profile } from '@/types/database'
 import { AuthContext } from './auth-context'
 import { loadCachedProfile, saveCachedProfile } from './profile-cache'
@@ -72,10 +72,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(currentSession)
 
       if (!currentSession?.user) {
+        const userId = profileRef.current?.id
+
         profileRef.current = null
         setProfile(null)
         setLoading(false)
         queryClient.clear()
+
+        // Política offline: cerrar sesión limpia perfil/cachés/borradores,
+        // pero conserva las colas de ventas y gastos pendientes.
+        if (userId) {
+          clearUserCaches(userId)
+        }
+
         return
       }
 
@@ -120,7 +129,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     queryClient.clear()
 
     if (userId) {
-      clearUserStorage(userId)
+      clearUserCaches(userId)
     }
   }
 

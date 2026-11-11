@@ -9,9 +9,9 @@ import type { EventExpenseView, EventSaleView, EventStatus } from '@/types/datab
 import { EventExpenseForm } from './EventExpenseForm'
 import { EventSaleForm } from './EventSaleForm'
 import { useEventSync } from './event-sync-context'
-import { hasEventOfflineData } from './event-cache'
 import { eventPaymentMethodLabels, eventStatusLabels, expenseCategoryLabels } from './event-labels'
 import { calculateEventReport, pendingSaleTotals } from './event-reporting'
+import { prepareEventOffline } from './prepare-offline'
 import {
   deleteEventExpense,
   deleteEventSale,
@@ -46,15 +46,7 @@ export function EventDetailPage() {
   const online = useOnlineStatus()
   const canOperate = profile?.role === 'admin' || profile?.role === 'operador'
   const isAdmin = profile?.role === 'admin'
-  const {
-    pendingSales,
-    pendingExpenses,
-    syncing,
-    syncError,
-    refresh: refreshPending,
-    syncNow,
-    retryErrors,
-  } = useEventSync()
+  const { pendingSales, pendingExpenses, refresh: refreshPending } = useEventSync()
 
   const bundleQuery = useQuery({
     queryKey: ['event_bundle', eventId],
@@ -73,13 +65,6 @@ export function EventDetailPage() {
 
   const eventPendingSales = pendingSales.filter((sale) => sale.eventId === eventId)
   const eventPendingExpenses = pendingExpenses.filter((expense) => expense.eventId === eventId)
-  const pendingSaleCount = eventPendingSales.filter((sale) => sale.status === 'pending').length
-  const pendingExpenseCount = eventPendingExpenses.filter(
-    (expense) => expense.status === 'pending',
-  ).length
-  const pendingErrorCount =
-    eventPendingSales.filter((sale) => sale.status === 'error').length +
-    eventPendingExpenses.filter((expense) => expense.status === 'error').length
 
   const invalidateEvent = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ['event_bundle', eventId] })
@@ -136,29 +121,24 @@ export function EventDetailPage() {
     setActionError(null)
     setOfflineReady(false)
 
-    try {
-      const [bundleResult, productsResult] = await Promise.all([
-        bundleQuery.refetch(),
-        productsQuery.refetch(),
-        fetchEvents(userId),
-      ])
+    const result = await prepareEventOffline({
+      userId,
+      eventId,
+      refetchBundle: () => bundleQuery.refetch(),
+      refetchProducts: () => productsQuery.refetch(),
+      fetchEvents: () => fetchEvents(userId),
+      persist:
+        typeof navigator !== 'undefined' && navigator.storage?.persist
+          ? () => navigator.storage.persist()
+          : undefined,
+    })
 
-      if (bundleResult.isError) throw bundleResult.error
-      if (productsResult.isError) throw productsResult.error
-      if (!bundleResult.data || !hasEventOfflineData(userId, eventId)) {
-        throw new Error('No se pudo guardar el evento y el catálogo en el teléfono.')
-      }
-
-      if (typeof navigator !== 'undefined' && navigator.storage?.persist) {
-        await navigator.storage.persist()
-      }
-
-      setOfflineReady(true)
-    } catch (error) {
-      setActionError(
-        error instanceof Error ? error.message : 'No se pudo preparar el modo offline.',
-      )
+    if (!result.ok) {
+      setActionError(result.message)
+      return
     }
+
+    setOfflineReady(true)
   }
 
   function handleDeletePendingSale(sale: PendingEventSale) {
@@ -233,9 +213,6 @@ export function EventDetailPage() {
     const rightDate = right.kind === 'saved' ? right.expense.spent_at : right.expense.spentAt
     return dateValue(rightDate) - dateValue(leftDate)
   })
-
-  const pendingTotal = eventPendingSales.length + eventPendingExpenses.length
-  const pendingLabel = `${pendingSaleCount + pendingExpenseCount} por sincronizar`
 
   return (
     <div className="space-y-4">
@@ -316,48 +293,6 @@ export function EventDetailPage() {
           </div>
         </div>
       </section>
-
-      {pendingTotal > 0 ? (
-        <section className="space-y-2 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-100">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="font-medium">Pendiente de sincronizar</p>
-              <p className="mt-1 text-xs text-amber-200">
-                {eventPendingSales.length} {eventPendingSales.length === 1 ? 'venta' : 'ventas'} ·{' '}
-                {eventPendingExpenses.length}{' '}
-                {eventPendingExpenses.length === 1 ? 'gasto' : 'gastos'} en este teléfono.
-              </p>
-              <p className="mt-0.5 text-xs text-amber-200">
-                {pendingLabel}
-                {pendingErrorCount > 0 ? ` · ${pendingErrorCount} con error` : ''}
-              </p>
-            </div>
-            <div className="flex shrink-0 flex-col gap-1">
-              {pendingSaleCount + pendingExpenseCount > 0 ? (
-                <button
-                  type="button"
-                  onClick={() => void syncNow()}
-                  disabled={!online || syncing}
-                  className="rounded-lg border border-amber-400/40 px-2 py-1 text-xs text-amber-100 disabled:opacity-60"
-                >
-                  {syncing ? 'Sincronizando…' : 'Sincronizar'}
-                </button>
-              ) : null}
-              {pendingErrorCount > 0 ? (
-                <button
-                  type="button"
-                  onClick={() => void retryErrors()}
-                  disabled={!online || syncing}
-                  className="rounded-lg border border-amber-400/40 px-2 py-1 text-xs text-amber-100 disabled:opacity-60"
-                >
-                  Reintentar errores
-                </button>
-              ) : null}
-            </div>
-          </div>
-          {syncError ? <p className="text-xs text-red-200">{syncError}</p> : null}
-        </section>
-      ) : null}
 
       <section className="flex flex-wrap gap-2">
         <button
@@ -444,6 +379,8 @@ export function EventDetailPage() {
 
         {saleRows.map((row) => {
           if (row.kind === 'pending') {
+            const totals = pendingSaleTotals(row.sale)
+
             return (
               <article
                 key={`pending-${row.sale.clientId}`}
@@ -459,9 +396,10 @@ export function EventDetailPage() {
                     </p>
                   </div>
                   <div className="text-right">
-                    <p className="font-semibold text-amber-100">
-                      {formatCurrency(pendingSaleTotals(row.sale).total)}
-                    </p>
+                    <p className="font-semibold text-amber-100">{formatCurrency(totals.total)}</p>
+                    {totals.limitExceeded ? (
+                      <p className="text-[11px] text-red-200">Límite inválido</p>
+                    ) : null}
                     <button
                       type="button"
                       onClick={() => handleDeletePendingSale(row.sale)}

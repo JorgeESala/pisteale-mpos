@@ -21,16 +21,14 @@ type QueueItem = {
 type ProcessQueueOptions<T extends QueueItem> = {
   kind: 'sale' | 'expense'
   items: T[]
-  includeErrors?: boolean
   send: (item: T) => Promise<void>
-  onSuccess: (item: T) => boolean
-  onError: (item: T, message: string) => boolean
+  onSuccess: (item: T) => void
+  onError: (item: T, message: string) => void
 }
 
 export async function processPendingQueue<T extends QueueItem>({
   kind,
   items,
-  includeErrors = false,
   send,
   onSuccess,
   onError,
@@ -42,8 +40,6 @@ export async function processPendingQueue<T extends QueueItem>({
   }
 
   for (const item of items) {
-    if (!includeErrors && item.status !== 'pending') continue
-
     try {
       await send(item)
       onSuccess(item)

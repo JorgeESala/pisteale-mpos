@@ -23,6 +23,7 @@ describe('event sale pricing', () => {
       grossTotal: 300,
       discountTotal: 20,
       total: 280,
+      limitExceeded: false,
     })
   })
 
@@ -31,6 +32,7 @@ describe('event sale pricing', () => {
       grossTotal: 180,
       discountTotal: 0,
       total: 180,
+      limitExceeded: false,
     })
   })
 
@@ -39,6 +41,7 @@ describe('event sale pricing', () => {
       grossTotal: 400,
       discountTotal: 120,
       total: 280,
+      limitExceeded: false,
     })
   })
 
@@ -47,6 +50,7 @@ describe('event sale pricing', () => {
       grossTotal: 700,
       discountTotal: 20,
       total: 680,
+      limitExceeded: false,
     })
   })
 
@@ -55,6 +59,7 @@ describe('event sale pricing', () => {
       grossTotal: 300,
       discountTotal: 0,
       total: 300,
+      limitExceeded: false,
     })
   })
 
@@ -63,6 +68,7 @@ describe('event sale pricing', () => {
       grossTotal: 500,
       discountTotal: 40,
       total: 460,
+      limitExceeded: false,
     })
   })
 
@@ -77,6 +83,7 @@ describe('event sale pricing', () => {
       grossTotal: 300,
       discountTotal: 50,
       total: 250,
+      limitExceeded: false,
     })
   })
 
@@ -89,6 +96,7 @@ describe('event sale pricing', () => {
       grossTotal: 10100,
       discountTotal: 0,
       total: 10100,
+      limitExceeded: true,
     })
   })
 
@@ -109,6 +117,7 @@ describe('event sale pricing', () => {
       grossTotal: 50100,
       discountTotal: 0,
       total: 50100,
+      limitExceeded: true,
     })
   })
 })

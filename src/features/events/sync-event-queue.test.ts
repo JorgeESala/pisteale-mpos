@@ -20,12 +20,12 @@ describe('processPendingQueue', () => {
 
   it('skips error items by default', async () => {
     const send = vi.fn().mockResolvedValue(undefined)
-    const onSuccess = vi.fn().mockReturnValue(true)
-    const onError = vi.fn().mockReturnValue(true)
+    const onSuccess = vi.fn()
+    const onError = vi.fn()
 
     const result = await processPendingQueue({
       kind: 'sale',
-      items,
+      items: items.filter((item) => item.status === 'pending'),
       send,
       onSuccess,
       onError,
@@ -36,30 +36,13 @@ describe('processPendingQueue', () => {
     expect(result.errors).toEqual([])
   })
 
-  it('processes error items when requested', async () => {
-    const send = vi.fn().mockResolvedValue(undefined)
-    const onSuccess = vi.fn().mockReturnValue(true)
-    const onError = vi.fn().mockReturnValue(true)
-
-    await processPendingQueue({
-      kind: 'sale',
-      items,
-      includeErrors: true,
-      send,
-      onSuccess,
-      onError,
-    })
-
-    expect(send).toHaveBeenCalledTimes(3)
-  })
-
   it('stops when connectivity fails', async () => {
     const send = vi
       .fn()
       .mockRejectedValueOnce(new TypeError('Failed to fetch'))
       .mockResolvedValue(undefined)
-    const onSuccess = vi.fn().mockReturnValue(true)
-    const onError = vi.fn().mockReturnValue(true)
+    const onSuccess = vi.fn()
+    const onError = vi.fn()
 
     const result = await processPendingQueue({
       kind: 'sale',
@@ -79,12 +62,12 @@ describe('processPendingQueue', () => {
       .fn()
       .mockRejectedValueOnce({ code: '22023', message: 'Precio inválido' })
       .mockResolvedValue(undefined)
-    const onSuccess = vi.fn().mockReturnValue(true)
-    const onError = vi.fn().mockReturnValue(true)
+    const onSuccess = vi.fn()
+    const onError = vi.fn()
 
     const result = await processPendingQueue({
       kind: 'sale',
-      items,
+      items: items.filter((item) => item.status === 'pending'),
       send,
       onSuccess,
       onError,

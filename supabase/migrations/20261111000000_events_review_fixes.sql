@@ -559,3 +559,25 @@ left join public.profiles pr on pr.id = es.created_by;
 
 revoke all on public.v_event_sales from anon, authenticated;
 grant select on public.v_event_sales to authenticated;
+
+comment on column public.event_sales.promotion_applied is
+  'Indica si la venta usó una promoción al momento de capturarse.';
+
+comment on column public.event_sales.bundle_qty is
+  'Snapshot de la cantidad de bebidas de la promoción usada por la venta.';
+
+comment on column public.event_sales.bundle_price is
+  'Snapshot del precio de la promoción usada por la venta.';
+
+comment on function public.create_event_sale(
+  uuid,
+  uuid,
+  jsonb,
+  boolean,
+  integer,
+  numeric,
+  text,
+  text,
+  timestamptz
+) is
+  'Regla de negocio: el cliente envía el snapshot de promoción para que una venta offline conserve las condiciones con las que se capturó. El servidor valida forma y rangos, pero no compara el snapshot contra la configuración vigente del evento.';
