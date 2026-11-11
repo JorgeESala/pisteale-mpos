@@ -150,7 +150,7 @@ select set_config(
 
 select extensions.is(
   (select count(*) from public.profiles),
-  3::bigint,
+  4::bigint,
   'admin sees all profiles'
 );
 
