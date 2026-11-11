@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react'
 import { Link, NavLink } from 'react-router-dom'
 import { useAuth } from '@/features/auth/auth-context'
+import { EventSyncBanner } from '@/features/events/EventSyncBanner'
+import { EventSyncProvider } from '@/features/events/EventSyncProvider'
 
 const navItems = [
   { label: 'Inicio', href: '/', enabled: true },
@@ -17,6 +19,14 @@ const roleLabels: Record<string, string> = {
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
+  return (
+    <EventSyncProvider>
+      <AppShellLayout>{children}</AppShellLayout>
+    </EventSyncProvider>
+  )
+}
+
+function AppShellLayout({ children }: { children: ReactNode }) {
   const { session, profile, signOut } = useAuth()
 
   return (
@@ -41,7 +51,10 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-md px-4 pb-28 pt-5 md:max-w-2xl">{children}</main>
+      <main className="mx-auto w-full max-w-md px-4 pb-28 pt-5 md:max-w-2xl">
+        <EventSyncBanner />
+        {children}
+      </main>
 
       <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-neutral-800 bg-neutral-950/95 backdrop-blur">
         <div className="mx-auto flex max-w-md items-stretch gap-1 px-2 pb-[max(env(safe-area-inset-bottom),0.5rem)] pt-2 md:max-w-2xl">

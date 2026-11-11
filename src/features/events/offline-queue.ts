@@ -1,8 +1,16 @@
 import type { EventExpenseCategory, PaymentMethod } from '@/types/database'
+import { userStorageKey } from '@/lib/user-storage'
 import type { EventSaleLineInput } from './event-pricing'
 
-const SALES_KEY = 'pisteale:event-sales-queue:v1'
-const EXPENSES_KEY = 'pisteale:event-expenses-queue:v1'
+const SALES_NAME = 'event-sales-queue:v2'
+const EXPENSES_NAME = 'event-expenses-queue:v2'
+
+export class OfflineStorageError extends Error {
+  constructor(message = 'No se pudo guardar la venta en el teléfono.') {
+    super(message)
+    this.name = 'OfflineStorageError'
+  }
+}
 
 export type PendingEventSale = {
   clientId: string
@@ -10,6 +18,8 @@ export type PendingEventSale = {
   soldAt: string
   items: EventSaleLineInput[]
   applyPromotion: boolean
+  bundleQty: number
+  bundlePrice: number
   paymentMethod: PaymentMethod
   notes: string
   queuedAt: number
@@ -51,10 +61,24 @@ export function createClientId() {
     return crypto.randomUUID()
   }
 
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+    const bytes = crypto.getRandomValues(new Uint8Array(16))
+    bytes[6] = ((bytes[6] ?? 0) & 0x0f) | 0x40
+    bytes[8] = ((bytes[8] ?? 0) & 0x3f) | 0x80
+    const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
+
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(
+      16,
+      20,
+    )}-${hex.slice(20)}`
+  }
+
+  throw new Error('El navegador no puede generar identificadores seguros.')
 }
 
-function loadQueue<T>(key: string, isValid: (value: unknown) => value is T): T[] {
+function loadQueue<T>(userId: string, name: string, isValid: (value: unknown) => value is T): T[] {
+  const key = userStorageKey(userId, name)
+
   try {
     const raw = window.localStorage.getItem(key)
     if (!raw) return []
@@ -72,11 +96,12 @@ function loadQueue<T>(key: string, isValid: (value: unknown) => value is T): T[]
   }
 }
 
-function saveQueue<T>(key: string, items: T[]) {
+function saveQueue<T>(userId: string, name: string, items: T[]) {
   try {
-    window.localStorage.setItem(key, JSON.stringify(items))
+    window.localStorage.setItem(userStorageKey(userId, name), JSON.stringify(items))
+    return true
   } catch {
-    // Si el almacenamiento está lleno, la venta ya se mostró en pantalla.
+    return false
   }
 }
 
@@ -94,6 +119,7 @@ function isPendingEventSale(value: unknown): value is PendingEventSale {
   if (typeof value.soldAt !== 'string' || typeof value.notes !== 'string') return false
   if (!isPaymentMethod(value.paymentMethod)) return false
   if (typeof value.applyPromotion !== 'boolean') return false
+  if (typeof value.bundleQty !== 'number' || typeof value.bundlePrice !== 'number') return false
   if (!Array.isArray(value.items) || value.items.length === 0) return false
   if (value.status !== 'pending' && value.status !== 'error') return false
 
@@ -137,16 +163,16 @@ function isPendingEventExpense(value: unknown): value is PendingEventExpense {
   )
 }
 
-export function loadPendingEventSales() {
-  return loadQueue(SALES_KEY, isPendingEventSale)
+export function loadPendingEventSales(userId: string) {
+  return loadQueue(userId, SALES_NAME, isPendingEventSale)
 }
 
-export function loadPendingEventExpenses() {
-  return loadQueue(EXPENSES_KEY, isPendingEventExpense)
+export function loadPendingEventExpenses(userId: string) {
+  return loadQueue(userId, EXPENSES_NAME, isPendingEventExpense)
 }
 
-export function enqueueEventSale(input: EventSaleQueueInput) {
-  const sales = loadPendingEventSales()
+export function enqueueEventSale(userId: string, input: EventSaleQueueInput) {
+  const sales = loadPendingEventSales(userId)
   const clientId = input.clientId ?? createClientId()
   const existing = sales.find((sale) => sale.clientId === clientId)
 
@@ -160,12 +186,17 @@ export function enqueueEventSale(input: EventSaleQueueInput) {
     error: null,
   }
 
-  saveQueue(SALES_KEY, [...sales, pending])
+  if (!saveQueue(userId, SALES_NAME, [...sales, pending])) {
+    throw new OfflineStorageError(
+      'No se pudo guardar la venta en el teléfono. Libera espacio e inténtalo de nuevo.',
+    )
+  }
+
   return pending
 }
 
-export function enqueueEventExpense(input: EventExpenseQueueInput) {
-  const expenses = loadPendingEventExpenses()
+export function enqueueEventExpense(userId: string, input: EventExpenseQueueInput) {
+  const expenses = loadPendingEventExpenses(userId)
   const clientId = input.clientId ?? createClientId()
   const existing = expenses.find((expense) => expense.clientId === clientId)
 
@@ -179,46 +210,76 @@ export function enqueueEventExpense(input: EventExpenseQueueInput) {
     error: null,
   }
 
-  saveQueue(EXPENSES_KEY, [...expenses, pending])
+  if (!saveQueue(userId, EXPENSES_NAME, [...expenses, pending])) {
+    throw new OfflineStorageError(
+      'No se pudo guardar el gasto en el teléfono. Libera espacio e inténtalo de nuevo.',
+    )
+  }
+
   return pending
 }
 
-export function removePendingEventSale(clientId: string) {
-  saveQueue(
-    SALES_KEY,
-    loadPendingEventSales().filter((sale) => sale.clientId !== clientId),
+export function removePendingEventSale(userId: string, clientId: string) {
+  return saveQueue(
+    userId,
+    SALES_NAME,
+    loadPendingEventSales(userId).filter((sale) => sale.clientId !== clientId),
   )
 }
 
-export function removePendingEventExpense(clientId: string) {
-  saveQueue(
-    EXPENSES_KEY,
-    loadPendingEventExpenses().filter((expense) => expense.clientId !== clientId),
+export function removePendingEventExpense(userId: string, clientId: string) {
+  return saveQueue(
+    userId,
+    EXPENSES_NAME,
+    loadPendingEventExpenses(userId).filter((expense) => expense.clientId !== clientId),
   )
 }
 
-export function markPendingEventSaleError(clientId: string, error: string) {
-  saveQueue(
-    SALES_KEY,
-    loadPendingEventSales().map((sale) =>
+export function markPendingEventSaleError(userId: string, clientId: string, error: string) {
+  return saveQueue(
+    userId,
+    SALES_NAME,
+    loadPendingEventSales(userId).map((sale) =>
       sale.clientId === clientId ? { ...sale, status: 'error', error } : sale,
     ),
   )
 }
 
-export function markPendingEventExpenseError(clientId: string, error: string) {
-  saveQueue(
-    EXPENSES_KEY,
-    loadPendingEventExpenses().map((expense) =>
+export function markPendingEventExpenseError(userId: string, clientId: string, error: string) {
+  return saveQueue(
+    userId,
+    EXPENSES_NAME,
+    loadPendingEventExpenses(userId).map((expense) =>
       expense.clientId === clientId ? { ...expense, status: 'error', error } : expense,
     ),
   )
 }
 
-export function pendingSalesForEvent(eventId: string) {
-  return loadPendingEventSales().filter((sale) => sale.eventId === eventId)
+export function retryPendingEventSale(userId: string, clientId: string) {
+  return saveQueue(
+    userId,
+    SALES_NAME,
+    loadPendingEventSales(userId).map((sale) =>
+      sale.clientId === clientId ? { ...sale, status: 'pending', error: null } : sale,
+    ),
+  )
 }
 
-export function pendingExpensesForEvent(eventId: string) {
-  return loadPendingEventExpenses().filter((expense) => expense.eventId === eventId)
+export function retryPendingEventExpense(userId: string, clientId: string) {
+  return saveQueue(
+    userId,
+    EXPENSES_NAME,
+    loadPendingEventExpenses(userId).map((expense) =>
+      expense.clientId === clientId ? { ...expense, status: 'pending', error: null } : expense,
+    ),
+  )
+}
+
+// La cola vive en localStorage y no está diseñada para dos pestañas concurrentes.
+export function pendingSalesForEvent(userId: string, eventId: string) {
+  return loadPendingEventSales(userId).filter((sale) => sale.eventId === eventId)
+}
+
+export function pendingExpensesForEvent(userId: string, eventId: string) {
+  return loadPendingEventExpenses(userId).filter((expense) => expense.eventId === eventId)
 }

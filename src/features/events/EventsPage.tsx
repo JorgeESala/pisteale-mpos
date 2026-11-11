@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
+import { useAuth } from '@/features/auth/auth-context'
 import { formatDate } from '@/features/inventory/inventory-utils'
 import { formatCurrency } from '@/lib/format'
 import { useOnlineStatus } from '@/lib/use-online-status'
@@ -7,10 +8,14 @@ import { eventStatusLabels } from './event-labels'
 import { fetchEvents } from './queries'
 
 export function EventsPage() {
+  const { profile } = useAuth()
+  const userId = profile?.id ?? null
+  const canOperate = profile?.role === 'admin' || profile?.role === 'operador'
   const online = useOnlineStatus()
   const eventsQuery = useQuery({
     queryKey: ['events'],
-    queryFn: fetchEvents,
+    queryFn: () => fetchEvents(userId!),
+    enabled: Boolean(userId),
   })
 
   const events = eventsQuery.data ?? []
@@ -22,12 +27,14 @@ export function EventsPage() {
           <p className="text-sm text-neutral-400">PISTEALE</p>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight">Eventos</h1>
         </div>
-        <Link
-          to="/eventos/nuevo"
-          className="rounded-xl bg-brand-400 px-3 py-2 text-sm font-semibold text-neutral-950 transition hover:bg-brand-300"
-        >
-          Nuevo evento
-        </Link>
+        {canOperate ? (
+          <Link
+            to="/eventos/nuevo"
+            className="rounded-xl bg-brand-400 px-3 py-2 text-sm font-semibold text-neutral-950 transition hover:bg-brand-300"
+          >
+            Nuevo evento
+          </Link>
+        ) : null}
       </section>
 
       {!online ? (
@@ -48,12 +55,14 @@ export function EventsPage() {
           <p className="mt-1 text-sm text-neutral-400">
             Crea el evento para registrar ventas, gastos y saber cuánto se ganó o perdió.
           </p>
-          <Link
-            to="/eventos/nuevo"
-            className="mt-4 inline-flex rounded-xl border border-neutral-700 px-3 py-2 text-sm text-neutral-200"
-          >
-            Crear evento
-          </Link>
+          {canOperate ? (
+            <Link
+              to="/eventos/nuevo"
+              className="mt-4 inline-flex rounded-xl border border-neutral-700 px-3 py-2 text-sm text-neutral-200"
+            >
+              Crear evento
+            </Link>
+          ) : null}
         </section>
       ) : (
         <section className="space-y-3">

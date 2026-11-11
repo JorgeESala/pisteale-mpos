@@ -83,4 +83,32 @@ describe('event sale pricing', () => {
   it('calculates line totals with cents', () => {
     expect(eventSaleLineTotal(line(3, 99.99))).toBe(299.97)
   })
+
+  it('does not expand quantities above the per-line limit', () => {
+    expect(calculateEventSaleTotals([line(101, 100)], promotion)).toEqual({
+      grossTotal: 10100,
+      discountTotal: 0,
+      total: 10100,
+    })
+  })
+
+  it('does not expand quantities above the total limit', () => {
+    expect(
+      calculateEventSaleTotals(
+        [
+          line(100, 100),
+          line(100, 100),
+          line(100, 100),
+          line(100, 100),
+          line(100, 100),
+          line(1, 100),
+        ],
+        promotion,
+      ),
+    ).toEqual({
+      grossTotal: 50100,
+      discountTotal: 0,
+      total: 50100,
+    })
+  })
 })

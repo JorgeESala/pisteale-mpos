@@ -5,10 +5,8 @@ import type {
   EventSaleView,
   EventView,
 } from '@/types/database'
+import { userStorageKey } from '@/lib/user-storage'
 
-const LIST_KEY = 'pisteale:event-list-cache:v1'
-const PRODUCTS_KEY = 'pisteale:event-products-cache:v1'
-const DETAIL_PREFIX = 'pisteale:event-detail-cache:v1:'
 const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
 
 type CacheEnvelope<T> = {
@@ -22,6 +20,18 @@ export type EventBundle = {
   sales: EventSaleView[]
   saleItems: EventSaleItemView[]
   expenses: EventExpenseView[]
+}
+
+function listKey(userId: string) {
+  return userStorageKey(userId, 'event-list-cache:v2')
+}
+
+function productsKey(userId: string) {
+  return userStorageKey(userId, 'event-products-cache:v2')
+}
+
+function detailKey(userId: string, eventId: string) {
+  return userStorageKey(userId, `event-detail-cache:v2:${eventId}`)
 }
 
 function readCache<T>(key: string): T | null {
@@ -56,8 +66,9 @@ function writeCache<T>(key: string, value: T) {
       value,
     }
     window.localStorage.setItem(key, JSON.stringify(envelope))
+    return true
   } catch {
-    // El caché es una ayuda; si falla, la app sigue funcionando en línea.
+    return false
   }
 }
 
@@ -65,30 +76,38 @@ export function isOffline() {
   return typeof navigator !== 'undefined' && navigator.onLine === false
 }
 
-export function loadEventListCache() {
-  return readCache<EventView[]>(LIST_KEY)
+export function loadEventListCache(userId: string) {
+  return readCache<EventView[]>(listKey(userId))
 }
 
-export function saveEventListCache(events: EventView[]) {
-  writeCache(LIST_KEY, events)
+export function saveEventListCache(userId: string, events: EventView[]) {
+  return writeCache(listKey(userId), events)
 }
 
-export function loadEventProductsCache() {
-  return readCache<EventProduct[]>(PRODUCTS_KEY)
+export function loadEventProductsCache(userId: string) {
+  return readCache<EventProduct[]>(productsKey(userId))
 }
 
-export function saveEventProductsCache(products: EventProduct[]) {
-  writeCache(PRODUCTS_KEY, products)
+export function saveEventProductsCache(userId: string, products: EventProduct[]) {
+  return writeCache(productsKey(userId), products)
 }
 
-export function loadEventDetailCache(eventId: string) {
-  return readCache<EventBundle>(`${DETAIL_PREFIX}${eventId}`)
+export function loadEventDetailCache(userId: string, eventId: string) {
+  return readCache<EventBundle>(detailKey(userId, eventId))
 }
 
-export function saveEventDetailCache(bundle: EventBundle) {
-  writeCache(`${DETAIL_PREFIX}${bundle.event.id}`, bundle)
+export function saveEventDetailCache(userId: string, bundle: EventBundle) {
+  return writeCache(detailKey(userId, bundle.event.id), bundle)
 }
 
-export function clearEventDetailCache(eventId: string) {
-  window.localStorage.removeItem(`${DETAIL_PREFIX}${eventId}`)
+export function clearEventDetailCache(userId: string, eventId: string) {
+  try {
+    window.localStorage.removeItem(detailKey(userId, eventId))
+  } catch {
+    // Nada que hacer.
+  }
+}
+
+export function hasEventOfflineData(userId: string, eventId: string) {
+  return loadEventDetailCache(userId, eventId) !== null && loadEventProductsCache(userId) !== null
 }

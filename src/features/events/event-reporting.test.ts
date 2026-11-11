@@ -46,6 +46,8 @@ const pendingSale: PendingEventSale = {
     },
   ],
   applyPromotion: true,
+  bundleQty: 2,
+  bundlePrice: 180,
   paymentMethod: 'cash',
   notes: '',
   queuedAt: 0,
@@ -77,6 +79,9 @@ const savedSale: EventSaleView = {
   gross_total: 200,
   discount_total: 20,
   total: 180,
+  promotion_applied: true,
+  bundle_qty: 2,
+  bundle_price: 180,
   notes: '',
   created_by: null,
   created_at: '2026-11-14T19:00:00.000Z',
@@ -128,6 +133,21 @@ describe('event report', () => {
     expect(report.paymentBreakdown.cash.sales).toBe(460)
     expect(report.paymentBreakdown.cash.expenses).toBe(80)
     expect(report.cashExpected).toBe(880)
+  })
+
+  it('keeps the promotion snapshot of pending sales', () => {
+    const report = calculateEventReport(
+      {
+        event: { ...event, bundle_price: 250 },
+        sales: [],
+        saleItems: [],
+        expenses: [],
+      },
+      [pendingSale],
+      [],
+    )
+
+    expect(report.salesTotal).toBe(460)
   })
 
   it('calculates a negative result', () => {

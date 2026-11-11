@@ -1,5 +1,5 @@
 import { act, renderHook } from '@testing-library/react'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { formDraftKey, loadFormDraft, saveFormDraft } from './form-drafts'
 import { useDraftState } from './use-draft-state'
 
@@ -13,6 +13,15 @@ const initialValue: Draft = { cart: [], notes: '' }
 describe('useDraftState', () => {
   beforeEach(() => {
     window.localStorage.clear()
+    vi.useRealTimers()
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      value: 'visible',
+    })
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it('restores an existing draft', () => {
@@ -25,12 +34,19 @@ describe('useDraftState', () => {
     expect(result.current.restored).toBe(true)
   })
 
-  it('saves every change immediately', () => {
+  it('debounces changes before saving', () => {
+    vi.useFakeTimers()
     const key = formDraftKey('sale', 'user-1', 'nuevo')
     const { result } = renderHook(() => useDraftState({ storageKey: key, initialValue }))
 
     act(() => {
       result.current.setValue({ cart: ['paloma'], notes: 'Sin hielo' })
+    })
+
+    expect(loadFormDraft<Draft>(key)).toBeNull()
+
+    act(() => {
+      vi.advanceTimersByTime(250)
     })
 
     expect(loadFormDraft<Draft>(key)).toEqual({ cart: ['paloma'], notes: 'Sin hielo' })

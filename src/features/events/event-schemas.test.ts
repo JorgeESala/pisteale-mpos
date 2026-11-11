@@ -43,6 +43,34 @@ describe('event schemas', () => {
     expect(result.success).toBe(false)
   })
 
+  it('rejects excessive quantities', () => {
+    const line = {
+      productId: null,
+      productName: 'Mojito',
+      quantity: 101,
+      unitPrice: 100,
+      promotionEligible: true,
+    }
+
+    expect(
+      eventSaleFormSchema.safeParse({
+        items: [line],
+        applyPromotion: true,
+        paymentMethod: 'cash',
+        notes: '',
+      }).success,
+    ).toBe(false)
+
+    expect(
+      eventSaleFormSchema.safeParse({
+        items: Array.from({ length: 6 }, () => ({ ...line, quantity: 100 })),
+        applyPromotion: true,
+        paymentMethod: 'cash',
+        notes: '',
+      }).success,
+    ).toBe(false)
+  })
+
   it('validates an expense', () => {
     const result = eventExpenseFormSchema.safeParse({
       category: 'supplies',

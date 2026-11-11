@@ -4,9 +4,10 @@ import { formDraftKey } from '@/lib/form-drafts'
 import { useDraftState } from '@/lib/use-draft-state'
 import type { EventExpenseCategory, EventView, PaymentMethod } from '@/types/database'
 import { eventPaymentMethodLabels, expenseCategoryLabels } from './event-labels'
+import { isConnectivityError } from './connectivity'
 import { eventExpenseFormSchema, localDateTimeToIso, localDateTimeValue } from './event-schemas'
 import { createClientId, enqueueEventExpense } from './offline-queue'
-import { createEventExpense, isConnectivityError } from './queries'
+import { createEventExpense } from './queries'
 
 type EventExpenseDraft = {
   category: EventExpenseCategory
@@ -38,7 +39,8 @@ type EventExpenseFormProps = {
 
 export function EventExpenseForm({ event, online, onExpenseSaved }: EventExpenseFormProps) {
   const { profile } = useAuth()
-  const storageKey = profile?.id ? formDraftKey('event-expense', profile.id, event.id) : null
+  const userId = profile?.id ?? null
+  const storageKey = userId ? formDraftKey('event-expense', userId, event.id) : null
   const [initialDraft] = useState(emptyExpenseDraft)
   const {
     value: draft,
@@ -94,6 +96,10 @@ export function EventExpenseForm({ event, online, onExpenseSaved }: EventExpense
     }
 
     try {
+      if (!userId) {
+        throw new Error('La sesión no está disponible. Vuelve a iniciar sesión.')
+      }
+
       if (online) {
         await createEventExpense(input)
         discard()
@@ -102,16 +108,24 @@ export function EventExpenseForm({ event, online, onExpenseSaved }: EventExpense
         return
       }
 
-      enqueueEventExpense(input)
+      enqueueEventExpense(userId, input)
       discard()
       setMessage('Gasto guardado sin conexión. Se sincronizará al recuperar señal.')
       onExpenseSaved(true)
     } catch (submitError) {
-      if (isConnectivityError(submitError)) {
-        enqueueEventExpense(input)
-        discard()
-        setMessage('Gasto guardado sin conexión. Se sincronizará al recuperar señal.')
-        onExpenseSaved(true)
+      if (isConnectivityError(submitError) && userId) {
+        try {
+          enqueueEventExpense(userId, input)
+          discard()
+          setMessage('Gasto guardado sin conexión. Se sincronizará al recuperar señal.')
+          onExpenseSaved(true)
+        } catch (queueError) {
+          setError(
+            queueError instanceof Error
+              ? queueError.message
+              : 'No se pudo guardar el gasto en el teléfono.',
+          )
+        }
         return
       }
 

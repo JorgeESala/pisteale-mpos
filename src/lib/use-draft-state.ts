@@ -34,12 +34,19 @@ export function useDraftState<T>({ storageKey, initialValue }: UseDraftStateOpti
   const loadedKeyRef = useRef(storageKey)
   const valueRef = useRef(state.value)
   const dirtyRef = useRef(false)
+  const timerRef = useRef<number | null>(null)
 
   useEffect(() => {
     if (loadedKeyRef.current === storageKey) return
 
     loadedKeyRef.current = storageKey
     dirtyRef.current = false
+
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current)
+      timerRef.current = null
+    }
+
     const next = loadDraftState(storageKey, initialValue)
     valueRef.current = next.value
     queueMicrotask(() => setState(next))
@@ -49,6 +56,11 @@ export function useDraftState<T>({ storageKey, initialValue }: UseDraftStateOpti
     if (!storageKey) return
 
     const flush = () => {
+      if (timerRef.current !== null) {
+        window.clearTimeout(timerRef.current)
+        timerRef.current = null
+      }
+
       if (dirtyRef.current) {
         saveFormDraft(storageKey, valueRef.current)
       }
@@ -84,13 +96,27 @@ export function useDraftState<T>({ storageKey, initialValue }: UseDraftStateOpti
       setState((current) => ({ value: resolved, restored: current.restored }))
 
       if (storageKey) {
-        saveFormDraft(storageKey, resolved)
+        if (timerRef.current !== null) {
+          window.clearTimeout(timerRef.current)
+        }
+
+        timerRef.current = window.setTimeout(() => {
+          if (dirtyRef.current) {
+            saveFormDraft(storageKey, valueRef.current)
+          }
+          timerRef.current = null
+        }, 250)
       }
     },
     [storageKey],
   )
 
   const clear = useCallback(() => {
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current)
+      timerRef.current = null
+    }
+
     if (storageKey) {
       clearFormDraft(storageKey)
     }
@@ -99,6 +125,11 @@ export function useDraftState<T>({ storageKey, initialValue }: UseDraftStateOpti
   }, [storageKey])
 
   const discard = useCallback(() => {
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current)
+      timerRef.current = null
+    }
+
     if (storageKey) {
       clearFormDraft(storageKey)
     }

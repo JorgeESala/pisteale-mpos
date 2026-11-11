@@ -34,7 +34,7 @@ export function useFormDraft<T extends FieldValues>({
       if (timer.current !== null) {
         window.clearTimeout(timer.current)
       }
-      timer.current = window.setTimeout(flush, 100)
+      timer.current = window.setTimeout(flush, 250)
     }
 
     const subscription = watch((values) => {

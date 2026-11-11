@@ -1,4 +1,4 @@
-import type { EventExpenseView, EventSaleView, EventView, PaymentMethod } from '@/types/database'
+import type { EventExpenseView, EventSaleView, PaymentMethod } from '@/types/database'
 import type { EventBundle } from './event-cache'
 import { calculateEventSaleTotals, roundEventMoney } from './event-pricing'
 import type { PendingEventExpense, PendingEventSale } from './offline-queue'
@@ -34,11 +34,11 @@ function emptyPaymentBreakdown(): PaymentBreakdown {
   }
 }
 
-export function pendingSaleTotals(sale: PendingEventSale, event: EventView) {
+export function pendingSaleTotals(sale: PendingEventSale) {
   return calculateEventSaleTotals(sale.items, {
-    enabled: event.promotion_enabled && sale.applyPromotion,
-    bundleQty: event.bundle_qty,
-    bundlePrice: event.bundle_price,
+    enabled: sale.applyPromotion,
+    bundleQty: sale.bundleQty,
+    bundlePrice: sale.bundlePrice,
   })
 }
 
@@ -64,7 +64,7 @@ export function calculateEventReport(
   let drinksCount = event.drinks_count
 
   for (const sale of pendingSales) {
-    const totals = pendingSaleTotals(sale, event)
+    const totals = pendingSaleTotals(sale)
     grossSales += totals.grossTotal
     discountTotal += totals.discountTotal
     salesTotal += totals.total

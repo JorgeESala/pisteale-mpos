@@ -589,6 +589,9 @@ export type EventSale = {
   gross_total: number
   discount_total: number
   total: number
+  promotion_applied: boolean
+  bundle_qty: number | null
+  bundle_price: number | null
   notes: string
   created_by: string | null
   created_at: string
@@ -648,7 +651,6 @@ export type EventProduct = {
   id: string
   name: string
   price: number
-  premium_price: number | null
   kind: ProductKind
   is_alcoholic: boolean
 }
@@ -1076,6 +1078,8 @@ export type Database = {
           p_event_id: string
           p_items: Json
           p_apply_promotion: boolean
+          p_bundle_qty: number
+          p_bundle_price: number
           p_payment_method: PaymentMethod
           p_notes: string
           p_sold_at: string
@@ -1086,9 +1090,8 @@ export type Database = {
         Args: { p_id: string }
         Returns: undefined
       }
-      upsert_event_expense: {
+      create_event_expense: {
         Args: {
-          p_id: string | null
           p_client_id: string
           p_event_id: string
           p_category: EventExpenseCategory

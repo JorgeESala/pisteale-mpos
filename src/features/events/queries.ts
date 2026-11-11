@@ -6,6 +6,7 @@ import type {
   EventView,
   PaymentMethod,
 } from '@/types/database'
+import { isConnectivityError } from './connectivity'
 import {
   isOffline,
   loadEventDetailCache,
@@ -18,9 +19,11 @@ import {
 } from './event-cache'
 import type { EventSaleLineInput } from './event-pricing'
 
-export async function fetchEventProducts(): Promise<EventProduct[]> {
+export { isConnectivityError } from './connectivity'
+
+export async function fetchEventProducts(userId: string): Promise<EventProduct[]> {
   if (isOffline()) {
-    const cached = loadEventProductsCache()
+    const cached = loadEventProductsCache(userId)
     if (cached) return cached
 
     throw new Error('Sin conexión y sin catálogo guardado. Abre el evento con internet.')
@@ -28,23 +31,23 @@ export async function fetchEventProducts(): Promise<EventProduct[]> {
 
   const { data, error } = await supabase
     .from('products')
-    .select('id,name,price,premium_price,kind,is_alcoholic')
+    .select('id,name,price,kind,is_alcoholic')
     .eq('active', true)
     .order('name')
 
   if (error) {
-    const cached = loadEventProductsCache()
-    if (cached) return cached
+    const cached = loadEventProductsCache(userId)
+    if (cached && isConnectivityError(error)) return cached
     throw error
   }
 
-  saveEventProductsCache(data)
+  saveEventProductsCache(userId, data)
   return data
 }
 
-export async function fetchEvents(): Promise<EventView[]> {
+export async function fetchEvents(userId: string): Promise<EventView[]> {
   if (isOffline()) {
-    const cached = loadEventListCache()
+    const cached = loadEventListCache(userId)
     if (cached) return cached
 
     throw new Error('Sin conexión y sin eventos guardados.')
@@ -57,18 +60,18 @@ export async function fetchEvents(): Promise<EventView[]> {
     .order('created_at', { ascending: false })
 
   if (error) {
-    const cached = loadEventListCache()
-    if (cached) return cached
+    const cached = loadEventListCache(userId)
+    if (cached && isConnectivityError(error)) return cached
     throw error
   }
 
-  saveEventListCache(data)
+  saveEventListCache(userId, data)
   return data
 }
 
-export async function fetchEventBundle(eventId: string): Promise<EventBundle> {
+export async function fetchEventBundle(userId: string, eventId: string): Promise<EventBundle> {
   if (isOffline()) {
-    const cached = loadEventDetailCache(eventId)
+    const cached = loadEventDetailCache(userId, eventId)
     if (cached) return cached
 
     throw new Error('Sin conexión y sin datos del evento. Ábrelo con internet antes de salir.')
@@ -106,22 +109,24 @@ export async function fetchEventBundle(eventId: string): Promise<EventBundle> {
       expenses: expensesResult.data,
     }
 
-    saveEventDetailCache(bundle)
-    saveEventListCache(mergeEventIntoCache(bundle.event) ?? loadEventListCache() ?? [bundle.event])
+    saveEventDetailCache(userId, bundle)
+
+    const cachedList = loadEventListCache(userId)
+    if (cachedList) {
+      saveEventListCache(
+        userId,
+        cachedList.map((candidate) =>
+          candidate.id === bundle.event.id ? bundle.event : candidate,
+        ),
+      )
+    }
 
     return bundle
   } catch (error) {
-    const cached = loadEventDetailCache(eventId)
-    if (cached) return cached
+    const cached = loadEventDetailCache(userId, eventId)
+    if (cached && isConnectivityError(error)) return cached
     throw error
   }
-}
-
-function mergeEventIntoCache(event: EventView) {
-  const cached = loadEventListCache()
-  if (!cached) return null
-
-  return cached.map((candidate) => (candidate.id === event.id ? event : candidate))
 }
 
 export type CreateEventInput = {
@@ -194,6 +199,8 @@ export type CreateEventSaleInput = {
   eventId: string
   items: EventSaleLineInput[]
   applyPromotion: boolean
+  bundleQty: number
+  bundlePrice: number
   paymentMethod: PaymentMethod
   notes: string
   soldAt: string
@@ -211,6 +218,8 @@ export async function createEventSale(input: CreateEventSaleInput): Promise<stri
       promotion_eligible: item.promotionEligible,
     })),
     p_apply_promotion: input.applyPromotion,
+    p_bundle_qty: input.bundleQty,
+    p_bundle_price: input.bundlePrice,
     p_payment_method: input.paymentMethod,
     p_notes: input.notes,
     p_sold_at: input.soldAt,
@@ -240,8 +249,7 @@ export type CreateEventExpenseInput = {
 }
 
 export async function createEventExpense(input: CreateEventExpenseInput): Promise<string> {
-  const { data, error } = await supabase.rpc('upsert_event_expense', {
-    p_id: null,
+  const { data, error } = await supabase.rpc('create_event_expense', {
     p_client_id: input.clientId,
     p_event_id: input.eventId,
     p_category: input.category,
@@ -262,17 +270,4 @@ export async function deleteEventExpense(expenseId: string): Promise<void> {
   const { error } = await supabase.rpc('delete_event_expense', { p_id: expenseId })
 
   if (error) throw error
-}
-
-export function isConnectivityError(error: unknown) {
-  if (isOffline()) return true
-
-  if (typeof error === 'object' && error !== null && 'code' in error) {
-    return false
-  }
-
-  const message = error instanceof Error ? error.message : String(error)
-  return /failed to fetch|fetch failed|networkerror|network request failed|load failed|aborted/i.test(
-    message,
-  )
 }

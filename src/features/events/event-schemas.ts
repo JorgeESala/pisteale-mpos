@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { EVENT_SALE_MAX_LINE_QTY, EVENT_SALE_MAX_TOTAL_UNITS } from './event-pricing'
 
 const timeSchema = z
   .string()
@@ -33,17 +34,33 @@ export type EventForm = z.infer<typeof eventFormSchema>
 export const eventSaleItemSchema = z.object({
   productId: z.string().uuid().nullable(),
   productName: z.string().trim().min(1, 'Nombre requerido').max(200, 'Máximo 200 caracteres'),
-  quantity: z.number().int().positive('Cantidad inválida'),
+  quantity: z
+    .number()
+    .int()
+    .positive('Cantidad inválida')
+    .max(EVENT_SALE_MAX_LINE_QTY, `Máximo ${EVENT_SALE_MAX_LINE_QTY} por bebida`),
   unitPrice: z.number().min(0, 'Precio inválido'),
   promotionEligible: z.boolean(),
 })
 
-export const eventSaleFormSchema = z.object({
-  items: z.array(eventSaleItemSchema).min(1, 'Agrega al menos una bebida'),
-  applyPromotion: z.boolean(),
-  paymentMethod: z.enum(['cash', 'card', 'transfer', 'other']),
-  notes: z.string().max(1000, 'Máximo 1000 caracteres'),
-})
+export const eventSaleFormSchema = z
+  .object({
+    items: z.array(eventSaleItemSchema).min(1, 'Agrega al menos una bebida'),
+    applyPromotion: z.boolean(),
+    paymentMethod: z.enum(['cash', 'card', 'transfer', 'other']),
+    notes: z.string().max(1000, 'Máximo 1000 caracteres'),
+  })
+  .superRefine((data, ctx) => {
+    const totalUnits = data.items.reduce((sum, item) => sum + item.quantity, 0)
+
+    if (totalUnits > EVENT_SALE_MAX_TOTAL_UNITS) {
+      ctx.addIssue({
+        code: 'custom',
+        message: `Máximo ${EVENT_SALE_MAX_TOTAL_UNITS} bebidas por venta`,
+        path: ['items'],
+      })
+    }
+  })
 
 export type EventSaleForm = z.infer<typeof eventSaleFormSchema>
 

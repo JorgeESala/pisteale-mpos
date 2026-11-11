@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useAuth } from '@/features/auth/auth-context'
 import { formatDateTime, formatDate } from '@/features/inventory/inventory-utils'
@@ -8,24 +8,19 @@ import { useOnlineStatus } from '@/lib/use-online-status'
 import type { EventExpenseView, EventSaleView, EventStatus } from '@/types/database'
 import { EventExpenseForm } from './EventExpenseForm'
 import { EventSaleForm } from './EventSaleForm'
+import { useEventSync } from './event-sync-context'
+import { hasEventOfflineData } from './event-cache'
 import { eventPaymentMethodLabels, eventStatusLabels, expenseCategoryLabels } from './event-labels'
-import { calculateEventSaleTotals } from './event-pricing'
-import { calculateEventReport } from './event-reporting'
+import { calculateEventReport, pendingSaleTotals } from './event-reporting'
 import {
-  createEventExpense,
-  createEventSale,
   deleteEventExpense,
   deleteEventSale,
   fetchEventBundle,
   fetchEventProducts,
-  isConnectivityError,
+  fetchEvents,
   setEventStatus,
 } from './queries'
 import {
-  loadPendingEventExpenses,
-  loadPendingEventSales,
-  markPendingEventExpenseError,
-  markPendingEventSaleError,
   removePendingEventExpense,
   removePendingEventSale,
   type PendingEventExpense,
@@ -47,114 +42,49 @@ export function EventDetailPage() {
   const eventId = id ?? ''
   const queryClient = useQueryClient()
   const { profile } = useAuth()
+  const userId = profile?.id ?? null
   const online = useOnlineStatus()
   const canOperate = profile?.role === 'admin' || profile?.role === 'operador'
   const isAdmin = profile?.role === 'admin'
+  const {
+    pendingSales,
+    pendingExpenses,
+    syncing,
+    syncError,
+    refresh: refreshPending,
+    syncNow,
+    retryErrors,
+  } = useEventSync()
 
   const bundleQuery = useQuery({
     queryKey: ['event_bundle', eventId],
-    queryFn: () => fetchEventBundle(eventId),
-    enabled: Boolean(eventId),
+    queryFn: () => fetchEventBundle(userId!, eventId),
+    enabled: Boolean(eventId && userId),
   })
 
   const productsQuery = useQuery({
     queryKey: ['event_products'],
-    queryFn: fetchEventProducts,
+    queryFn: () => fetchEventProducts(userId!),
+    enabled: Boolean(userId),
   })
 
-  const [pendingSales, setPendingSales] = useState<PendingEventSale[]>([])
-  const [pendingExpenses, setPendingExpenses] = useState<PendingEventExpense[]>([])
-  const [syncing, setSyncing] = useState(false)
-  const [syncError, setSyncError] = useState<string | null>(null)
   const [offlineReady, setOfflineReady] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
-  const syncingRef = useRef(false)
 
-  const refreshPending = useCallback(() => {
-    const nextSales = loadPendingEventSales().filter((sale) => sale.eventId === eventId)
-    const nextExpenses = loadPendingEventExpenses().filter((expense) => expense.eventId === eventId)
-
-    setPendingSales((current) => (sameQueue(current, nextSales) ? current : nextSales))
-    setPendingExpenses((current) => (sameQueue(current, nextExpenses) ? current : nextExpenses))
-  }, [eventId])
-
-  useEffect(() => {
-    queueMicrotask(refreshPending)
-  }, [refreshPending])
+  const eventPendingSales = pendingSales.filter((sale) => sale.eventId === eventId)
+  const eventPendingExpenses = pendingExpenses.filter((expense) => expense.eventId === eventId)
+  const pendingSaleCount = eventPendingSales.filter((sale) => sale.status === 'pending').length
+  const pendingExpenseCount = eventPendingExpenses.filter(
+    (expense) => expense.status === 'pending',
+  ).length
+  const pendingErrorCount =
+    eventPendingSales.filter((sale) => sale.status === 'error').length +
+    eventPendingExpenses.filter((expense) => expense.status === 'error').length
 
   const invalidateEvent = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ['event_bundle', eventId] })
     void queryClient.invalidateQueries({ queryKey: ['events'] })
   }, [eventId, queryClient])
-
-  const syncPending = useCallback(async () => {
-    if (syncingRef.current || !online) return
-    if (pendingSales.length === 0 && pendingExpenses.length === 0) return
-
-    syncingRef.current = true
-    setSyncing(true)
-    setSyncError(null)
-
-    try {
-      for (const sale of pendingSales.filter((item) => item.status === 'pending')) {
-        try {
-          await createEventSaleFromQueue(sale)
-          removePendingEventSale(sale.clientId)
-        } catch (error) {
-          if (isConnectivityError(error)) {
-            break
-          }
-
-          const message =
-            error instanceof Error ? error.message : 'No se pudo sincronizar una venta.'
-          markPendingEventSaleError(sale.clientId, message)
-          setSyncError(message)
-          break
-        }
-      }
-
-      for (const expense of pendingExpenses.filter((item) => item.status === 'pending')) {
-        try {
-          await createEventExpenseFromQueue(expense)
-          removePendingEventExpense(expense.clientId)
-        } catch (error) {
-          if (isConnectivityError(error)) {
-            break
-          }
-
-          const message =
-            error instanceof Error ? error.message : 'No se pudo sincronizar un gasto.'
-          markPendingEventExpenseError(expense.clientId, message)
-          setSyncError(message)
-          break
-        }
-      }
-    } finally {
-      syncingRef.current = false
-      setSyncing(false)
-      refreshPending()
-      invalidateEvent()
-    }
-  }, [invalidateEvent, online, pendingExpenses, pendingSales, refreshPending])
-
-  const pendingSaleCount = pendingSales.filter((sale) => sale.status === 'pending').length
-  const pendingExpenseCount = pendingExpenses.filter(
-    (expense) => expense.status === 'pending',
-  ).length
-
-  useEffect(() => {
-    if (!online) return
-    if (pendingSaleCount === 0 && pendingExpenseCount === 0) return
-
-    queueMicrotask(() => {
-      void syncPending()
-    })
-    const interval = window.setInterval(() => {
-      void syncPending()
-    }, 30_000)
-
-    return () => window.clearInterval(interval)
-  }, [online, pendingExpenseCount, pendingSaleCount, syncPending])
 
   const statusMutation = useMutation({
     mutationFn: (status: EventStatus) => setEventStatus(eventId, status),
@@ -198,7 +128,7 @@ export function EventDetailPage() {
   }
 
   async function prepareOffline() {
-    if (!online) {
+    if (!online || !userId) {
       setActionError('Conéctate a internet para preparar el modo offline.')
       return
     }
@@ -207,7 +137,17 @@ export function EventDetailPage() {
     setOfflineReady(false)
 
     try {
-      await Promise.all([bundleQuery.refetch(), productsQuery.refetch()])
+      const [bundleResult, productsResult] = await Promise.all([
+        bundleQuery.refetch(),
+        productsQuery.refetch(),
+        fetchEvents(userId),
+      ])
+
+      if (bundleResult.isError) throw bundleResult.error
+      if (productsResult.isError) throw productsResult.error
+      if (!bundleResult.data || !hasEventOfflineData(userId, eventId)) {
+        throw new Error('No se pudo guardar el evento y el catálogo en el teléfono.')
+      }
 
       if (typeof navigator !== 'undefined' && navigator.storage?.persist) {
         await navigator.storage.persist()
@@ -222,9 +162,10 @@ export function EventDetailPage() {
   }
 
   function handleDeletePendingSale(sale: PendingEventSale) {
+    if (!userId) return
     if (!window.confirm('¿Eliminar esta venta pendiente?')) return
 
-    removePendingEventSale(sale.clientId)
+    removePendingEventSale(userId, sale.clientId)
     refreshPending()
   }
 
@@ -235,9 +176,10 @@ export function EventDetailPage() {
   }
 
   function handleDeletePendingExpense(expense: PendingEventExpense) {
+    if (!userId) return
     if (!window.confirm('¿Eliminar este gasto pendiente?')) return
 
-    removePendingEventExpense(expense.clientId)
+    removePendingEventExpense(userId, expense.clientId)
     refreshPending()
   }
 
@@ -271,12 +213,12 @@ export function EventDetailPage() {
 
   const bundle = bundleQuery.data
   const event = bundle.event
-  const report = calculateEventReport(bundle, pendingSales, pendingExpenses)
+  const report = calculateEventReport(bundle, eventPendingSales, eventPendingExpenses)
   const products = productsQuery.data ?? []
 
   const saleRows: SaleRow[] = [
     ...bundle.sales.map((sale) => ({ kind: 'saved' as const, sale })),
-    ...pendingSales.map((sale) => ({ kind: 'pending' as const, sale })),
+    ...eventPendingSales.map((sale) => ({ kind: 'pending' as const, sale })),
   ].sort((left, right) => {
     const leftDate = left.kind === 'saved' ? left.sale.sold_at : left.sale.soldAt
     const rightDate = right.kind === 'saved' ? right.sale.sold_at : right.sale.soldAt
@@ -285,14 +227,15 @@ export function EventDetailPage() {
 
   const expenseRows: ExpenseRow[] = [
     ...bundle.expenses.map((expense) => ({ kind: 'saved' as const, expense })),
-    ...pendingExpenses.map((expense) => ({ kind: 'pending' as const, expense })),
+    ...eventPendingExpenses.map((expense) => ({ kind: 'pending' as const, expense })),
   ].sort((left, right) => {
     const leftDate = left.kind === 'saved' ? left.expense.spent_at : left.expense.spentAt
     const rightDate = right.kind === 'saved' ? right.expense.spent_at : right.expense.spentAt
     return dateValue(rightDate) - dateValue(leftDate)
   })
 
-  const pendingTotal = pendingSales.length + pendingExpenses.length
+  const pendingTotal = eventPendingSales.length + eventPendingExpenses.length
+  const pendingLabel = `${pendingSaleCount + pendingExpenseCount} por sincronizar`
 
   return (
     <div className="space-y-4">
@@ -380,19 +323,37 @@ export function EventDetailPage() {
             <div>
               <p className="font-medium">Pendiente de sincronizar</p>
               <p className="mt-1 text-xs text-amber-200">
-                {pendingSales.length} {pendingSales.length === 1 ? 'venta' : 'ventas'} ·{' '}
-                {pendingExpenses.length} {pendingExpenses.length === 1 ? 'gasto' : 'gastos'} en este
-                teléfono.
+                {eventPendingSales.length} {eventPendingSales.length === 1 ? 'venta' : 'ventas'} ·{' '}
+                {eventPendingExpenses.length}{' '}
+                {eventPendingExpenses.length === 1 ? 'gasto' : 'gastos'} en este teléfono.
+              </p>
+              <p className="mt-0.5 text-xs text-amber-200">
+                {pendingLabel}
+                {pendingErrorCount > 0 ? ` · ${pendingErrorCount} con error` : ''}
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => void syncPending()}
-              disabled={!online || syncing}
-              className="shrink-0 rounded-lg border border-amber-400/40 px-2 py-1 text-xs text-amber-100 disabled:opacity-60"
-            >
-              {syncing ? 'Sincronizando…' : 'Sincronizar'}
-            </button>
+            <div className="flex shrink-0 flex-col gap-1">
+              {pendingSaleCount + pendingExpenseCount > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => void syncNow()}
+                  disabled={!online || syncing}
+                  className="rounded-lg border border-amber-400/40 px-2 py-1 text-xs text-amber-100 disabled:opacity-60"
+                >
+                  {syncing ? 'Sincronizando…' : 'Sincronizar'}
+                </button>
+              ) : null}
+              {pendingErrorCount > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => void retryErrors()}
+                  disabled={!online || syncing}
+                  className="rounded-lg border border-amber-400/40 px-2 py-1 text-xs text-amber-100 disabled:opacity-60"
+                >
+                  Reintentar errores
+                </button>
+              ) : null}
+            </div>
           </div>
           {syncError ? <p className="text-xs text-red-200">{syncError}</p> : null}
         </section>
@@ -499,13 +460,7 @@ export function EventDetailPage() {
                   </div>
                   <div className="text-right">
                     <p className="font-semibold text-amber-100">
-                      {formatCurrency(
-                        calculateEventSaleTotals(row.sale.items, {
-                          enabled: event.promotion_enabled && row.sale.applyPromotion,
-                          bundleQty: event.bundle_qty,
-                          bundlePrice: event.bundle_price,
-                        }).total,
-                      )}
+                      {formatCurrency(pendingSaleTotals(row.sale).total)}
                     </p>
                     <button
                       type="button"
@@ -645,34 +600,4 @@ export function EventDetailPage() {
       </section>
     </div>
   )
-}
-
-function sameQueue<T>(left: T[], right: T[]) {
-  return JSON.stringify(left) === JSON.stringify(right)
-}
-
-function createEventSaleFromQueue(sale: PendingEventSale) {
-  return createEventSale({
-    clientId: sale.clientId,
-    eventId: sale.eventId,
-    items: sale.items,
-    applyPromotion: sale.applyPromotion,
-    paymentMethod: sale.paymentMethod,
-    notes: sale.notes,
-    soldAt: sale.soldAt,
-  })
-}
-
-function createEventExpenseFromQueue(expense: PendingEventExpense) {
-  return createEventExpense({
-    clientId: expense.clientId,
-    eventId: expense.eventId,
-    category: expense.category,
-    description: expense.description,
-    amount: expense.amount,
-    paymentMethod: expense.paymentMethod,
-    reference: expense.reference,
-    spentAt: expense.spentAt,
-    notes: expense.notes,
-  })
 }

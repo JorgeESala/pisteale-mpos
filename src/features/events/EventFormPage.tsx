@@ -33,13 +33,14 @@ export function EventFormPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { profile } = useAuth()
+  const userId = profile?.id ?? null
   const isNew = !id
   const canManageEvents = profile?.role === 'admin' || profile?.role === 'operador'
 
   const eventsQuery = useQuery({
     queryKey: ['events'],
-    queryFn: fetchEvents,
-    enabled: canManageEvents,
+    queryFn: () => fetchEvents(userId!),
+    enabled: Boolean(userId && canManageEvents),
   })
 
   const event = isNew ? null : eventsQuery.data?.find((candidate) => candidate.id === id)
@@ -128,7 +129,9 @@ export function EventFormPage() {
     onSuccess: (eventId) => {
       clearDraft()
       setDraftRestored(false)
-      clearEventDetailCache(eventId)
+      if (userId) {
+        clearEventDetailCache(userId, eventId)
+      }
       void queryClient.invalidateQueries({ queryKey: ['events'] })
       void queryClient.invalidateQueries({ queryKey: ['event_bundle', eventId] })
       navigate(`/eventos/${eventId}`)

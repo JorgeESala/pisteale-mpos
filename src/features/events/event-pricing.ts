@@ -18,6 +18,9 @@ export type EventSaleTotals = {
   total: number
 }
 
+export const EVENT_SALE_MAX_LINE_QTY = 100
+export const EVENT_SALE_MAX_TOTAL_UNITS = 500
+
 export function roundEventMoney(value: number) {
   return Math.round(value * 100) / 100
 }
@@ -35,6 +38,28 @@ export function calculateEventSaleTotals(
   lines: EventSaleLineInput[],
   promotion: EventPromotionSettings,
 ): EventSaleTotals {
+  let grossTotal = 0
+  let totalUnits = 0
+  let exceedsLimit = false
+
+  for (const line of lines) {
+    const quantity = Math.max(0, Math.trunc(line.quantity))
+    const price = roundEventMoney(Math.max(0, line.unitPrice))
+
+    grossTotal += price * quantity
+    totalUnits += quantity
+
+    if (quantity > EVENT_SALE_MAX_LINE_QTY) {
+      exceedsLimit = true
+    }
+  }
+
+  grossTotal = roundEventMoney(grossTotal)
+
+  if (exceedsLimit || totalUnits > EVENT_SALE_MAX_TOTAL_UNITS) {
+    return { grossTotal, discountTotal: 0, total: grossTotal }
+  }
+
   const units: SaleUnit[] = []
 
   for (const line of lines) {
@@ -46,7 +71,6 @@ export function calculateEventSaleTotals(
     }
   }
 
-  const grossTotal = roundEventMoney(units.reduce((sum, unit) => sum + unit.price, 0))
   const bundleQty = Math.trunc(promotion.bundleQty)
 
   if (!promotion.enabled || bundleQty < 2 || promotion.bundlePrice < 0) {

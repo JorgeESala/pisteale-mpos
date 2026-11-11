@@ -5,14 +5,17 @@ import { formatCurrency } from '@/lib/format'
 import { useDraftState } from '@/lib/use-draft-state'
 import type { EventProduct, EventView, PaymentMethod } from '@/types/database'
 import { eventPaymentMethodLabels } from './event-labels'
+import { isConnectivityError } from './connectivity'
 import {
+  EVENT_SALE_MAX_LINE_QTY,
+  EVENT_SALE_MAX_TOTAL_UNITS,
   calculateEventSaleTotals,
   eventSaleLineTotal,
   type EventSaleLineInput,
 } from './event-pricing'
 import { eventSaleFormSchema } from './event-schemas'
 import { createClientId, enqueueEventSale } from './offline-queue'
-import { createEventSale, isConnectivityError } from './queries'
+import { createEventSale } from './queries'
 
 type EventSaleDraft = {
   lines: EventSaleLineInput[]
@@ -37,7 +40,8 @@ type EventSaleFormProps = {
 
 export function EventSaleForm({ event, products, online, onSaleSaved }: EventSaleFormProps) {
   const { profile } = useAuth()
-  const storageKey = profile?.id ? formDraftKey('event-sale', profile.id, event.id) : null
+  const userId = profile?.id ?? null
+  const storageKey = userId ? formDraftKey('event-sale', userId, event.id) : null
   const [initialDraft] = useState<EventSaleDraft>(() => ({
     ...emptyDraft,
     applyPromotion: event.promotion_enabled,
@@ -72,14 +76,27 @@ export function EventSaleForm({ event, products, online, onSaleSaved }: EventSal
   function addProduct(product: EventProduct) {
     setMessage(null)
     setError(null)
-    setDraft((current) => {
-      const existing = current.lines.find((line) => line.productId === product.id)
+    const existing = draft.lines.find((line) => line.productId === product.id)
+    const totalUnits = draft.lines.reduce((sum, line) => sum + line.quantity, 0)
 
-      if (existing) {
+    if (existing && existing.quantity >= EVENT_SALE_MAX_LINE_QTY) {
+      setError(`Máximo ${EVENT_SALE_MAX_LINE_QTY} unidades por bebida.`)
+      return
+    }
+
+    if (totalUnits >= EVENT_SALE_MAX_TOTAL_UNITS) {
+      setError(`Máximo ${EVENT_SALE_MAX_TOTAL_UNITS} bebidas por venta.`)
+      return
+    }
+
+    setDraft((current) => {
+      const currentLine = current.lines.find((line) => line.productId === product.id)
+
+      if (currentLine) {
         return {
           ...current,
           lines: current.lines.map((line) =>
-            line === existing ? { ...line, quantity: line.quantity + 1 } : line,
+            line === currentLine ? { ...line, quantity: line.quantity + 1 } : line,
           ),
         }
       }
@@ -111,6 +128,13 @@ export function EventSaleForm({ event, products, online, onSaleSaved }: EventSal
 
     if (!Number.isFinite(price) || price < 0) {
       setError('El precio del concepto es inválido.')
+      return
+    }
+
+    const totalUnits = draft.lines.reduce((sum, line) => sum + line.quantity, 0)
+
+    if (totalUnits >= EVENT_SALE_MAX_TOTAL_UNITS) {
+      setError(`Máximo ${EVENT_SALE_MAX_TOTAL_UNITS} bebidas por venta.`)
       return
     }
 
@@ -153,9 +177,10 @@ export function EventSaleForm({ event, products, online, onSaleSaved }: EventSal
     setError(null)
     setMessage(null)
 
+    const applyPromotion = event.promotion_enabled && draft.applyPromotion
     const candidate = {
       items: draft.lines,
-      applyPromotion: draft.applyPromotion,
+      applyPromotion,
       paymentMethod: draft.paymentMethod,
       notes: draft.notes,
     }
@@ -173,13 +198,19 @@ export function EventSaleForm({ event, products, online, onSaleSaved }: EventSal
       clientId,
       eventId: event.id,
       items: draft.lines,
-      applyPromotion: draft.applyPromotion,
+      applyPromotion,
+      bundleQty: event.bundle_qty,
+      bundlePrice: event.bundle_price,
       paymentMethod: draft.paymentMethod,
       notes: draft.notes,
       soldAt: new Date().toISOString(),
     }
 
     try {
+      if (!userId) {
+        throw new Error('La sesión no está disponible. Vuelve a iniciar sesión.')
+      }
+
       if (online) {
         await createEventSale(input)
         discard()
@@ -188,16 +219,24 @@ export function EventSaleForm({ event, products, online, onSaleSaved }: EventSal
         return
       }
 
-      enqueueEventSale(input)
+      enqueueEventSale(userId, input)
       discard()
       setMessage('Venta guardada sin conexión. Se sincronizará al recuperar señal.')
       onSaleSaved(true)
     } catch (submitError) {
-      if (isConnectivityError(submitError)) {
-        enqueueEventSale(input)
-        discard()
-        setMessage('Venta guardada sin conexión. Se sincronizará al recuperar señal.')
-        onSaleSaved(true)
+      if (isConnectivityError(submitError) && userId) {
+        try {
+          enqueueEventSale(userId, input)
+          discard()
+          setMessage('Venta guardada sin conexión. Se sincronizará al recuperar señal.')
+          onSaleSaved(true)
+        } catch (queueError) {
+          setError(
+            queueError instanceof Error
+              ? queueError.message
+              : 'No se pudo guardar la venta en el teléfono.',
+          )
+        }
         return
       }
 
@@ -333,7 +372,8 @@ export function EventSaleForm({ event, products, online, onSaleSaved }: EventSal
                 <button
                   type="button"
                   onClick={() => updateLine(index, { quantity: line.quantity + 1 })}
-                  className="size-8 rounded-lg border border-neutral-700 text-neutral-300"
+                  disabled={line.quantity >= EVENT_SALE_MAX_LINE_QTY}
+                  className="size-8 rounded-lg border border-neutral-700 text-neutral-300 disabled:opacity-40"
                 >
                   +
                 </button>

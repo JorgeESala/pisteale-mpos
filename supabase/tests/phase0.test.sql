@@ -2,13 +2,14 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select extensions.plan(163);
+select extensions.plan(173);
 
 delete from auth.users
 where id in (
   '11111111-1111-1111-1111-111111111111'::uuid,
   '22222222-2222-2222-2222-222222222222'::uuid,
-  '33333333-3333-3333-3333-333333333333'::uuid
+  '33333333-3333-3333-3333-333333333333'::uuid,
+  '44444444-4444-4444-4444-444444444444'::uuid
 );
 
 delete from public.document_sequences;
@@ -84,6 +85,17 @@ values
     now(),
     '{"provider":"email","providers":["email"]}'::jsonb,
     '{"full_name":"Inactive Test"}'::jsonb,
+    now(),
+    now()
+  ),
+  (
+    '44444444-4444-4444-4444-444444444444',
+    'authenticated',
+    'authenticated',
+    'consulta-test@pisteale.local',
+    now(),
+    '{"provider":"email","providers":["email"]}'::jsonb,
+    '{"full_name":"Consulta Test"}'::jsonb,
     now(),
     now()
   );
@@ -2179,6 +2191,8 @@ select public.create_event_sale(
     )
   ),
   true,
+  2,
+  180,
   'cash',
   '',
   '2026-11-14T20:00:00-05:00'::timestamptz
@@ -2230,6 +2244,20 @@ select extensions.is(
   'event sale stores its items'
 );
 
+select extensions.is(
+  (
+    select jsonb_build_object(
+      'applied', promotion_applied,
+      'qty', bundle_qty,
+      'price', bundle_price
+    )
+    from public.event_sales
+    where client_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid
+  ),
+  '{"applied":true,"qty":2,"price":180}'::jsonb,
+  'event sale stores the promotion snapshot'
+);
+
 select public.create_event_sale(
   'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid,
   (select id from public.events where name = 'Test Evento Parque'),
@@ -2243,6 +2271,8 @@ select public.create_event_sale(
     )
   ),
   true,
+  2,
+  180,
   'cash',
   '',
   '2026-11-14T20:00:00-05:00'::timestamptz
@@ -2271,6 +2301,8 @@ select public.create_event_sale(
     )
   ),
   false,
+  2,
+  180,
   'transfer',
   '',
   '2026-11-14T21:00:00-05:00'::timestamptz
@@ -2286,8 +2318,64 @@ select extensions.is(
   'event sale can skip the promotion'
 );
 
-select public.upsert_event_expense(
-  null,
+select extensions.throws_ok(
+  $sql$
+    select public.create_event_sale(
+      'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee'::uuid,
+      (select id from public.events where name = 'Test Evento Parque'),
+      jsonb_build_array(
+        jsonb_build_object(
+          'product_id', null,
+          'product_name', 'Mojito',
+          'quantity', 101,
+          'unit_price', 100,
+          'promotion_eligible', true
+        )
+      ),
+      true,
+      2,
+      180,
+      'cash',
+      '',
+      now()
+    )
+  $sql$,
+  '22023',
+  'Cantidad o precio de bebida inválido',
+  'event sale rejects quantities above the line limit'
+);
+
+select extensions.throws_ok(
+  $sql$
+    select public.create_event_sale(
+      'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid,
+      (select id from public.events where name = 'Test Evento Parque'),
+      (
+        select jsonb_agg(
+          jsonb_build_object(
+            'product_id', null,
+            'product_name', 'Mojito',
+            'quantity', 100,
+            'unit_price', 100,
+            'promotion_eligible', true
+          )
+        )
+        from generate_series(1, 6)
+      ),
+      true,
+      2,
+      180,
+      'cash',
+      '',
+      now()
+    )
+  $sql$,
+  '22023',
+  'La venta supera el máximo de 500 bebidas',
+  'event sale rejects more than 500 total units'
+);
+
+select public.create_event_expense(
   'cccccccc-cccc-cccc-cccc-cccccccccccc'::uuid,
   (select id from public.events where name = 'Test Evento Parque'),
   'supplies',
@@ -2309,8 +2397,7 @@ select extensions.is(
   'event expense is stored'
 );
 
-select public.upsert_event_expense(
-  null,
+select public.create_event_expense(
   'cccccccc-cccc-cccc-cccc-cccccccccccc'::uuid,
   (select id from public.events where name = 'Test Evento Parque'),
   'supplies',
@@ -2376,6 +2463,8 @@ select extensions.throws_ok(
         )
       ),
       true,
+      2,
+      180,
       'cash',
       '',
       now()
@@ -2476,7 +2565,121 @@ select extensions.is(
   'profit is recalculated after deleting the expense'
 );
 
+select public.update_event(
+  (select id from public.events where name = 'Test Evento Parque'),
+  'Test Evento Parque',
+  'Parque central',
+  current_date,
+  '17:00'::time,
+  '22:00'::time,
+  true,
+  2,
+  200,
+  500,
+  ''
+);
+
+select public.create_event_sale(
+  '99999999-9999-4999-8999-999999999999'::uuid,
+  (select id from public.events where name = 'Test Evento Parque'),
+  jsonb_build_array(
+    jsonb_build_object(
+      'product_id', null,
+      'product_name', 'Mojito',
+      'quantity', 2,
+      'unit_price', 100,
+      'promotion_eligible', true
+    )
+  ),
+  true,
+  2,
+  180,
+  'cash',
+  '',
+  now()
+);
+
+select extensions.is(
+  (
+    select total
+    from public.event_sales
+    where client_id = '99999999-9999-4999-8999-999999999999'::uuid
+  ),
+  180::numeric,
+  'event sale keeps its own promotion snapshot'
+);
+
+select extensions.is(
+  (
+    select bundle_price
+    from public.event_sales
+    where client_id = '99999999-9999-4999-8999-999999999999'::uuid
+  ),
+  180::numeric,
+  'event sale stores the snapshot bundle price'
+);
+
+select public.admin_set_profile(
+  '44444444-4444-4444-4444-444444444444'::uuid,
+  'consulta'::public.user_role,
+  true,
+  false,
+  false,
+  false
+);
+
 reset role;
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claim.sub',
+  '44444444-4444-4444-4444-444444444444',
+  true
+);
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"44444444-4444-4444-4444-444444444444","role":"authenticated"}',
+  true
+);
+
+select extensions.ok(
+  (select count(*) from public.v_events) >= 1,
+  'consulta can read events'
+);
+
+select extensions.throws_ok(
+  $sql$select public.create_event('Evento consulta', '', current_date, null, null, true, 2, 180, 0, '')$sql$,
+  '42501',
+  'No autorizado',
+  'consulta cannot create events'
+);
+
+select extensions.throws_ok(
+  $sql$
+    select public.create_event_sale(
+      '88888888-8888-4888-8888-888888888888'::uuid,
+      (select id from public.events where name = 'Test Evento Parque'),
+      jsonb_build_array(
+        jsonb_build_object(
+          'product_id', null,
+          'product_name', 'Mojito',
+          'quantity', 1,
+          'unit_price', 100,
+          'promotion_eligible', true
+        )
+      ),
+      true,
+      2,
+      180,
+      'cash',
+      '',
+      now()
+    )
+  $sql$,
+  '42501',
+  'No autorizado',
+  'consulta cannot create event sales'
+);
 
 reset role;
 
@@ -2489,6 +2692,20 @@ select extensions.throws_ok(
   '42501',
   'permission denied for table events',
   'anon cannot read events'
+);
+
+select extensions.throws_ok(
+  $sql$select count(*) from public.v_events$sql$,
+  '42501',
+  'permission denied for view v_events',
+  'anon cannot read event view'
+);
+
+select extensions.throws_ok(
+  $sql$select count(*) from public.v_event_sales$sql$,
+  '42501',
+  'permission denied for view v_event_sales',
+  'anon cannot read event sales view'
 );
 
 select extensions.throws_ok(
