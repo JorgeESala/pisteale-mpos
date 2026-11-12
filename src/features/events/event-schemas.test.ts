@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest'
 import {
   eventExpenseFormSchema,
   eventFormSchema,
+  eventInventoryAdjustSchema,
+  eventInventoryLoadFormSchema,
+  eventInventoryTransferSchema,
   eventSaleFormSchema,
   localDateTimeToIso,
   localDateTimeValue,
@@ -91,5 +94,48 @@ describe('event schemas', () => {
 
   it('creates a datetime-local value from a date', () => {
     expect(localDateTimeValue(new Date('2026-11-14T10:30:00'))).toMatch(/^2026-11-14T\d{2}:30$/)
+  })
+})
+
+describe('event inventory schemas', () => {
+  it('requires at least one item in a load', () => {
+    const result = eventInventoryLoadFormSchema.safeParse({
+      items: [],
+      category: 'supplies',
+      paymentMethod: 'cash',
+      reference: '',
+      notes: '',
+    })
+
+    expect(result.success).toBe(false)
+  })
+
+  it('accepts a valid load', () => {
+    const result = eventInventoryLoadFormSchema.safeParse({
+      items: [
+        {
+          itemId: '11111111-1111-4111-8111-111111111111',
+          qtyPurchase: 50,
+          totalCost: 100,
+        },
+      ],
+      category: 'supplies',
+      paymentMethod: 'cash',
+      reference: '',
+      notes: '',
+    })
+
+    expect(result.success).toBe(true)
+  })
+
+  it('validates adjustments and transfers', () => {
+    expect(eventInventoryAdjustSchema.safeParse({ countedQtyBase: 10, notes: '' }).success).toBe(
+      true,
+    )
+    expect(eventInventoryAdjustSchema.safeParse({ countedQtyBase: -1, notes: '' }).success).toBe(
+      false,
+    )
+    expect(eventInventoryTransferSchema.safeParse({ qtyBase: 1, notes: '' }).success).toBe(true)
+    expect(eventInventoryTransferSchema.safeParse({ qtyBase: 0, notes: '' }).success).toBe(false)
   })
 })
