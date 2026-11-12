@@ -16,6 +16,7 @@ import { ProductFormPage } from '@/features/catalog/ProductFormPage'
 import { DashboardPage } from '@/features/dashboard/DashboardPage'
 import { EventDetailPage } from '@/features/events/EventDetailPage'
 import { EventFormPage } from '@/features/events/EventFormPage'
+import { EventInventoryPage } from '@/features/events/EventInventoryPage'
 import { EventsPage } from '@/features/events/EventsPage'
 import { BottleDetailPage } from '@/features/inventory/BottleDetailPage'
 import { BottlesPage } from '@/features/inventory/BottlesPage'
@@ -268,6 +269,16 @@ export default function App() {
                 <ProtectedRoute>
                   <AppShell>
                     <EventFormPage />
+                  </AppShell>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/eventos/:id/inventario"
+              element={
+                <ProtectedRoute>
+                  <AppShell>
+                    <EventInventoryPage />
                   </AppShell>
                 </ProtectedRoute>
               }

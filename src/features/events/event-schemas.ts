@@ -66,6 +66,32 @@ export const eventExpenseFormSchema = z.object({
 
 export type EventExpenseForm = z.infer<typeof eventExpenseFormSchema>
 
+export const eventInventoryItemSchema = z.object({
+  itemId: z.string().uuid('Selecciona un insumo'),
+  qtyPurchase: z.number().positive('Cantidad inválida'),
+  totalCost: z.number().min(0, 'Costo inválido'),
+})
+
+export const eventInventoryLoadFormSchema = z.object({
+  items: z.array(eventInventoryItemSchema).min(1, 'Agrega al menos un insumo'),
+  category: z.enum(['supplies', 'ice', 'transport', 'staff', 'permits', 'rent', 'other']),
+  paymentMethod: z.enum(['cash', 'card', 'transfer', 'other']),
+  reference: z.string().max(100, 'Máximo 100 caracteres'),
+  notes: z.string().max(1000, 'Máximo 1000 caracteres'),
+})
+
+export type EventInventoryLoadForm = z.infer<typeof eventInventoryLoadFormSchema>
+
+export const eventInventoryAdjustSchema = z.object({
+  countedQtyBase: z.number().min(0, 'El conteo no puede ser negativo'),
+  notes: z.string().max(1000, 'Máximo 1000 caracteres'),
+})
+
+export const eventInventoryTransferSchema = z.object({
+  qtyBase: z.number().positive('Cantidad inválida'),
+  notes: z.string().max(1000, 'Máximo 1000 caracteres'),
+})
+
 export function localDateTimeToIso(value: string) {
   const date = new Date(value)
   return Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString()

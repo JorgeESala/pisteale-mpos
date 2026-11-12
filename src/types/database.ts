@@ -271,6 +271,7 @@ export type InventoryMovement = {
   bottle_opening_id: string | null
   order_id: string | null
   order_item_id: string | null
+  event_id: string | null
   notes: string
   occurred_at: string
   created_by: string | null
@@ -284,6 +285,8 @@ export type InventoryMovementView = InventoryMovement & {
   base_unit: BaseUnit
   purchase_folio: string | null
   order_folio: string | null
+  event_folio: string | null
+  event_name: string | null
   created_by_name: string | null
 }
 
@@ -647,6 +650,72 @@ export type EventExpenseView = EventExpense & {
   created_by_name: string | null
 }
 
+export type EventInventoryMovementType =
+  'purchase' | 'consumption' | 'transfer_out' | 'adjustment' | 'waste'
+
+export type EventInventoryLoad = {
+  id: string
+  client_id: string
+  event_id: string
+  total_cost: number
+  category: EventExpenseCategory
+  payment_method: PaymentMethod
+  reference: string
+  notes: string
+  event_expense_id: string | null
+  created_by: string | null
+  created_at: string
+}
+
+export type EventInventoryLoadView = EventInventoryLoad & {
+  event_folio: string
+  event_name: string
+  created_by_name: string | null
+}
+
+export type EventInventoryMovement = {
+  id: string
+  event_id: string
+  load_id: string | null
+  event_sale_id: string | null
+  item_id: string
+  movement_type: EventInventoryMovementType
+  qty_base: number
+  unit_cost: number
+  total_cost: number
+  notes: string
+  occurred_at: string
+  created_by: string | null
+  created_at: string
+}
+
+export type EventInventoryMovementView = EventInventoryMovement & {
+  event_folio: string
+  event_name: string
+  item_name: string
+  group_name: string
+  base_unit: BaseUnit
+  created_by_name: string | null
+}
+
+export type EventInventoryStock = {
+  event_id: string
+  item_id: string
+  item_name: string
+  group_id: string
+  group_name: string
+  base_unit: BaseUnit
+  track_stock: boolean
+  purchased_base: number
+  consumed_base: number
+  transferred_base: number
+  adjusted_base: number
+  waste_base: number
+  current_qty_base: number
+  avg_unit_cost: number
+  stock_value: number
+}
+
 export type EventProduct = {
   id: string
   name: string
@@ -841,6 +910,18 @@ export type Database = {
         Update: never
         Relationships: []
       }
+      event_inventory_loads: {
+        Row: EventInventoryLoad
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      event_inventory_movements: {
+        Row: EventInventoryMovement
+        Insert: never
+        Update: never
+        Relationships: []
+      }
     }
     Views: {
       v_ice_daily_records: {
@@ -909,6 +990,18 @@ export type Database = {
       }
       v_event_expenses: {
         Row: EventExpenseView
+        Relationships: []
+      }
+      v_event_inventory_loads: {
+        Row: EventInventoryLoadView
+        Relationships: []
+      }
+      v_event_inventory_movements: {
+        Row: EventInventoryMovementView
+        Relationships: []
+      }
+      v_event_inventory_stock: {
+        Row: EventInventoryStock
         Relationships: []
       }
       v_inventory_group_costs: {
@@ -1089,6 +1182,36 @@ export type Database = {
       delete_event_sale: {
         Args: { p_id: string }
         Returns: undefined
+      }
+      create_event_inventory_load: {
+        Args: {
+          p_client_id: string
+          p_event_id: string
+          p_items: Json
+          p_category: EventExpenseCategory
+          p_payment_method: PaymentMethod
+          p_reference: string
+          p_notes: string
+        }
+        Returns: string
+      }
+      adjust_event_inventory_item: {
+        Args: {
+          p_event_id: string
+          p_item_id: string
+          p_counted_qty_base: number
+          p_notes: string
+        }
+        Returns: number
+      }
+      transfer_event_inventory_to_general: {
+        Args: {
+          p_event_id: string
+          p_item_id: string
+          p_qty_base: number
+          p_notes: string
+        }
+        Returns: string
       }
       create_event_expense: {
         Args: {
