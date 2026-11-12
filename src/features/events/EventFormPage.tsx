@@ -4,9 +4,11 @@ import { useEffect, useRef, useState } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '@/features/auth/auth-context'
+import { formatDate } from '@/features/inventory/inventory-utils'
 import { clearFormDraft, formDraftKey, hasMeaningfulDraft, loadFormDraft } from '@/lib/form-drafts'
 import { useFormDraft } from '@/lib/use-form-draft'
 import { clearEventDetailCache } from './event-cache'
+import { eventEndDate } from './event-datetime'
 import { eventFormSchema, type EventForm } from './event-schemas'
 import { createEvent, fetchEvents, updateEvent } from './queries'
 
@@ -58,6 +60,18 @@ export function EventFormPage() {
   })
 
   const promotionEnabled = useWatch({ control, name: 'promotionEnabled' })
+  const eventDate = useWatch({ control, name: 'eventDate' })
+  const startTime = useWatch({ control, name: 'startTime' })
+  const endTime = useWatch({ control, name: 'endTime' })
+  const endsNextDay = Boolean(startTime && endTime && endTime <= startTime)
+  const inferredEndDate =
+    endsNextDay && eventDate
+      ? eventEndDate({
+          event_date: eventDate,
+          start_time: startTime,
+          end_time: endTime,
+        })
+      : null
   const storageKey = profile?.id ? formDraftKey('event', profile.id, id ?? 'nuevo') : null
   const initializedKeyRef = useRef<string | null>(null)
   const readyRef = useRef(false)
@@ -288,6 +302,13 @@ export function EventFormPage() {
               ) : null}
             </div>
           </div>
+
+          {endsNextDay && inferredEndDate ? (
+            <p className="rounded-xl border border-brand-400/30 bg-brand-400/10 px-3 py-2 text-xs text-brand-200">
+              El evento termina al día siguiente: {formatDate(inferredEndDate)} a las{' '}
+              {endTime.slice(0, 5)}.
+            </p>
+          ) : null}
 
           <div>
             <label htmlFor="eventCash" className="mb-1.5 block text-sm text-neutral-300">
