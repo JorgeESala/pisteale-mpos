@@ -76,7 +76,10 @@ describe('EventSyncProvider', () => {
     expect(createEventSale).toHaveBeenCalledWith(
       expect.objectContaining({ clientId: saleInput.clientId }),
     )
-    expect(result.current.queuedCount).toBe(0)
+
+    await waitFor(() => {
+      expect(result.current.queuedCount).toBe(0)
+    })
   })
 
   it('marks permanent errors and retries them manually', async () => {

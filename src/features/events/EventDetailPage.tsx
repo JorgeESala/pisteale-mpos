@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useAuth } from '@/features/auth/auth-context'
-import { formatDateTime, formatDate } from '@/features/inventory/inventory-utils'
+import { formatDateTime } from '@/features/inventory/inventory-utils'
 import { formatCurrency } from '@/lib/format'
 import { useOnlineStatus } from '@/lib/use-online-status'
 import type { EventExpenseView, EventSaleView, EventStatus } from '@/types/database'
@@ -10,6 +10,7 @@ import { EventExpenseForm } from './EventExpenseForm'
 import { EventSaleForm } from './EventSaleForm'
 import { useEventSync } from './event-sync-context'
 import { eventPaymentMethodLabels, eventStatusLabels, expenseCategoryLabels } from './event-labels'
+import { formatEventSchedule } from './event-datetime'
 import { calculateEventReport, pendingSaleTotals } from './event-reporting'
 import { prepareEventOffline } from './prepare-offline'
 import {
@@ -221,9 +222,7 @@ export function EventDetailPage() {
           <p className="text-[11px] font-medium tracking-wide text-neutral-500">{event.folio}</p>
           <h1 className="mt-1 truncate text-2xl font-semibold tracking-tight">{event.name}</h1>
           <p className="mt-1 text-sm text-neutral-400">
-            {formatDate(event.event_date)}
-            {event.start_time ? ` · ${event.start_time.slice(0, 5)}` : ''}
-            {event.end_time ? ` a ${event.end_time.slice(0, 5)}` : ''}
+            {formatEventSchedule(event)}
             {event.venue ? ` · ${event.venue}` : ''}
           </p>
         </div>

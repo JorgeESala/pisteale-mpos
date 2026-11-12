@@ -25,11 +25,10 @@ describe('event schemas', () => {
     expect(eventFormSchema.safeParse(eventForm).success).toBe(true)
   })
 
-  it('rejects an end time before the start time', () => {
-    const result = eventFormSchema.safeParse({ ...eventForm, endTime: '16:00' })
+  it('accepts an event that crosses midnight', () => {
+    const result = eventFormSchema.safeParse({ ...eventForm, endTime: '04:00' })
 
-    expect(result.success).toBe(false)
-    expect(result.error?.issues[0]?.path).toEqual(['endTime'])
+    expect(result.success).toBe(true)
   })
 
   it('requires at least one sale line', () => {
