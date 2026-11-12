@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select extensions.plan(173);
+select extensions.plan(177);
 
 delete from auth.users
 where id in (
@@ -2617,6 +2617,51 @@ select extensions.is(
   ),
   180::numeric,
   'event sale stores the snapshot bundle price'
+);
+
+select extensions.ok(
+  public.create_event(
+    'Test Evento Nocturno',
+    'Parque central',
+    current_date,
+    '17:00'::time,
+    '04:00'::time,
+    true,
+    2,
+    180,
+    0,
+    ''
+  ) is not null,
+  'event can cross midnight'
+);
+
+select extensions.is(
+  (select end_time from public.events where name = 'Test Evento Nocturno'),
+  '04:00'::time,
+  'overnight event stores its end time'
+);
+
+select extensions.ok(
+  public.update_event(
+    (select id from public.events where name = 'Test Evento Nocturno'),
+    'Test Evento Nocturno',
+    'Parque central',
+    current_date,
+    '18:00'::time,
+    '03:00'::time,
+    true,
+    2,
+    180,
+    0,
+    ''
+  ) is not null,
+  'event can be updated across midnight'
+);
+
+select extensions.is(
+  (select end_time from public.events where name = 'Test Evento Nocturno'),
+  '03:00'::time,
+  'overnight event update stores its end time'
 );
 
 select public.admin_set_profile(

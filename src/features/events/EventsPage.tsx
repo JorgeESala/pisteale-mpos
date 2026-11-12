@@ -1,9 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { useAuth } from '@/features/auth/auth-context'
-import { formatDate } from '@/features/inventory/inventory-utils'
 import { formatCurrency } from '@/lib/format'
 import { useOnlineStatus } from '@/lib/use-online-status'
+import { formatEventSchedule } from './event-datetime'
 import { eventStatusLabels } from './event-labels'
 import { fetchEvents } from './queries'
 
@@ -79,7 +79,7 @@ export function EventsPage() {
                   </p>
                   <h2 className="mt-0.5 truncate font-semibold">{event.name}</h2>
                   <p className="mt-1 text-sm text-neutral-400">
-                    {formatDate(event.event_date)}
+                    {formatEventSchedule(event)}
                     {event.venue ? ` · ${event.venue}` : ''}
                   </p>
                 </div>

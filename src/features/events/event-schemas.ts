@@ -6,28 +6,18 @@ const timeSchema = z
   .regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Hora inválida')
   .or(z.literal(''))
 
-export const eventFormSchema = z
-  .object({
-    name: z.string().trim().min(2, 'Mínimo 2 caracteres').max(120, 'Máximo 120 caracteres'),
-    venue: z.string().trim().max(200, 'Máximo 200 caracteres'),
-    eventDate: z.string().min(1, 'La fecha es obligatoria'),
-    startTime: timeSchema,
-    endTime: timeSchema,
-    promotionEnabled: z.boolean(),
-    bundleQty: z.number().int().min(2, 'Mínimo 2 bebidas'),
-    bundlePrice: z.number().min(0, 'Precio inválido'),
-    openingCash: z.number().min(0, 'Fondo inválido'),
-    notes: z.string().max(1000, 'Máximo 1000 caracteres'),
-  })
-  .superRefine((data, ctx) => {
-    if (data.startTime && data.endTime && data.endTime <= data.startTime) {
-      ctx.addIssue({
-        code: 'custom',
-        message: 'La hora de fin debe ser posterior a la de inicio',
-        path: ['endTime'],
-      })
-    }
-  })
+export const eventFormSchema = z.object({
+  name: z.string().trim().min(2, 'Mínimo 2 caracteres').max(120, 'Máximo 120 caracteres'),
+  venue: z.string().trim().max(200, 'Máximo 200 caracteres'),
+  eventDate: z.string().min(1, 'La fecha es obligatoria'),
+  startTime: timeSchema,
+  endTime: timeSchema,
+  promotionEnabled: z.boolean(),
+  bundleQty: z.number().int().min(2, 'Mínimo 2 bebidas'),
+  bundlePrice: z.number().min(0, 'Precio inválido'),
+  openingCash: z.number().min(0, 'Fondo inválido'),
+  notes: z.string().max(1000, 'Máximo 1000 caracteres'),
+})
 
 export type EventForm = z.infer<typeof eventFormSchema>
 
