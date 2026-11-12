@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
+import { queryClient } from '@/lib/queryClient'
 import { supabase } from '@/lib/supabase'
+import { clearUserCaches } from '@/lib/user-storage'
 import type { Profile } from '@/types/database'
 import { AuthContext } from './auth-context'
+import { loadCachedProfile, saveCachedProfile } from './profile-cache'
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
@@ -14,6 +17,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let active = true
 
     async function loadProfile(userId: string) {
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        const cached = loadCachedProfile(userId)
+
+        if (active) {
+          profileRef.current = cached
+          setProfile(cached)
+          setLoading(false)
+        }
+
+        return
+      }
+
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
@@ -25,8 +40,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (active) {
-        profileRef.current = data
-        setProfile(data)
+        const resolved = data ?? loadCachedProfile(userId)
+
+        if (resolved) {
+          saveCachedProfile(resolved)
+        }
+
+        profileRef.current = resolved
+        setProfile(resolved)
         setLoading(false)
       }
     }
@@ -51,9 +72,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(currentSession)
 
       if (!currentSession?.user) {
+        const userId = profileRef.current?.id
+
         profileRef.current = null
         setProfile(null)
         setLoading(false)
+        queryClient.clear()
+
+        // Política offline: cerrar sesión limpia perfil/cachés/borradores,
+        // pero conserva las colas de ventas y gastos pendientes.
+        if (userId) {
+          clearUserCaches(userId)
+        }
+
         return
       }
 
@@ -66,11 +97,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
-        if (profileRef.current) {
+        if (profileRef.current?.id === currentSession.user.id) {
           void loadProfile(currentSession.user.id)
           return
         }
 
+        queryClient.clear()
         setLoading(true)
         void loadProfile(currentSession.user.id)
         return
@@ -89,9 +121,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   async function signOut() {
+    const userId = profileRef.current?.id ?? session?.user.id
+
     await supabase.auth.signOut()
     profileRef.current = null
     setProfile(null)
+    queryClient.clear()
+
+    if (userId) {
+      clearUserCaches(userId)
+    }
   }
 
   async function updateProfileName(fullName: string) {
@@ -101,6 +140,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (error) throw error
 
+    saveCachedProfile(data)
     profileRef.current = data
     setProfile(data)
     return data
