@@ -1,6 +1,9 @@
 import { supabase } from '@/lib/supabase'
 import type {
   EventExpenseCategory,
+  EventInventoryLoadView,
+  EventInventoryMovementView,
+  EventInventoryStock,
   EventProduct,
   EventStatus,
   EventView,
@@ -270,4 +273,109 @@ export async function deleteEventExpense(expenseId: string): Promise<void> {
   const { error } = await supabase.rpc('delete_event_expense', { p_id: expenseId })
 
   if (error) throw error
+}
+
+export type EventInventoryBundle = {
+  stock: EventInventoryStock[]
+  loads: EventInventoryLoadView[]
+  movements: EventInventoryMovementView[]
+}
+
+export async function fetchEventInventory(eventId: string): Promise<EventInventoryBundle> {
+  const [stockResult, loadsResult, movementsResult] = await Promise.all([
+    supabase.from('v_event_inventory_stock').select('*').eq('event_id', eventId).order('item_name'),
+    supabase
+      .from('v_event_inventory_loads')
+      .select('*')
+      .eq('event_id', eventId)
+      .order('created_at', { ascending: false }),
+    supabase
+      .from('v_event_inventory_movements')
+      .select('*')
+      .eq('event_id', eventId)
+      .order('occurred_at', { ascending: false })
+      .limit(100),
+  ])
+
+  if (stockResult.error) throw stockResult.error
+  if (loadsResult.error) throw loadsResult.error
+  if (movementsResult.error) throw movementsResult.error
+
+  return {
+    stock: stockResult.data,
+    loads: loadsResult.data,
+    movements: movementsResult.data,
+  }
+}
+
+export type CreateEventInventoryLoadInput = {
+  clientId: string
+  eventId: string
+  items: Array<{
+    itemId: string
+    qtyPurchase: number
+    totalCost: number
+  }>
+  category: EventExpenseCategory
+  paymentMethod: PaymentMethod
+  reference: string
+  notes: string
+}
+
+export async function createEventInventoryLoad(
+  input: CreateEventInventoryLoadInput,
+): Promise<string> {
+  const { data, error } = await supabase.rpc('create_event_inventory_load', {
+    p_client_id: input.clientId,
+    p_event_id: input.eventId,
+    p_items: input.items.map((item) => ({
+      item_id: item.itemId,
+      qty_purchase: item.qtyPurchase,
+      total_cost: item.totalCost,
+    })),
+    p_category: input.category,
+    p_payment_method: input.paymentMethod,
+    p_reference: input.reference,
+    p_notes: input.notes,
+  })
+
+  if (error) throw error
+
+  return data
+}
+
+export async function adjustEventInventoryItem(input: {
+  eventId: string
+  itemId: string
+  countedQtyBase: number
+  notes: string
+}): Promise<number> {
+  const { data, error } = await supabase.rpc('adjust_event_inventory_item', {
+    p_event_id: input.eventId,
+    p_item_id: input.itemId,
+    p_counted_qty_base: input.countedQtyBase,
+    p_notes: input.notes,
+  })
+
+  if (error) throw error
+
+  return data
+}
+
+export async function transferEventInventoryToGeneral(input: {
+  eventId: string
+  itemId: string
+  qtyBase: number
+  notes: string
+}): Promise<string> {
+  const { data, error } = await supabase.rpc('transfer_event_inventory_to_general', {
+    p_event_id: input.eventId,
+    p_item_id: input.itemId,
+    p_qty_base: input.qtyBase,
+    p_notes: input.notes,
+  })
+
+  if (error) throw error
+
+  return data
 }

@@ -215,6 +215,15 @@ export function EventDetailPage() {
     return dateValue(rightDate) - dateValue(leftDate)
   })
 
+  function toggleStatus() {
+    if (event.status === 'open' && eventPendingSales.length > 0) {
+      setActionError('Sincroniza las ventas pendientes antes de cerrar el evento.')
+      return
+    }
+
+    statusMutation.mutate(event.status === 'open' ? 'closed' : 'open')
+  }
+
   return (
     <div className="space-y-4">
       <section className="flex items-start justify-between gap-3">
@@ -237,6 +246,12 @@ export function EventDetailPage() {
             {eventStatusLabels[event.status]}
           </span>
           <Link
+            to={`/eventos/${event.id}/inventario`}
+            className="rounded-xl border border-neutral-700 px-3 py-2 text-xs text-neutral-300"
+          >
+            Inventario
+          </Link>
+          <Link
             to={`/eventos/${event.id}/editar`}
             className="rounded-xl border border-neutral-700 px-3 py-2 text-xs text-neutral-300"
           >
@@ -249,6 +264,12 @@ export function EventDetailPage() {
         <p className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
           Sin conexión. Las ventas y gastos se guardan en el teléfono y se sincronizan al volver la
           señal.
+        </p>
+      ) : null}
+
+      {event.status === 'closed' && eventPendingSales.length > 0 ? (
+        <p className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
+          Hay ventas pendientes de sincronizar. Reabre el evento para poder sincronizarlas.
         </p>
       ) : null}
 
@@ -305,7 +326,7 @@ export function EventDetailPage() {
         {canOperate ? (
           <button
             type="button"
-            onClick={() => statusMutation.mutate(event.status === 'open' ? 'closed' : 'open')}
+            onClick={toggleStatus}
             disabled={statusMutation.isPending}
             className="rounded-xl border border-neutral-700 px-3 py-2 text-xs text-neutral-300 disabled:opacity-60"
           >

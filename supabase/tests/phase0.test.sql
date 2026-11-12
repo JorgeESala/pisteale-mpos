@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select extensions.plan(177);
+select extensions.plan(190);
 
 delete from auth.users
 where id in (
@@ -2662,6 +2662,268 @@ select extensions.is(
   (select end_time from public.events where name = 'Test Evento Nocturno'),
   '03:00'::time,
   'overnight event update stores its end time'
+);
+
+
+select extensions.ok(
+  public.create_event_inventory_load(
+    '13131313-1313-4313-8313-131313131313'::uuid,
+    (select id from public.events where name = 'Test Evento Parque'),
+    jsonb_build_array(
+      jsonb_build_object(
+        'item_id', (select id from public.inventory_items where name = 'Test Barman Ron'),
+        'qty_purchase', 2,
+        'total_cost', 100
+      ),
+      jsonb_build_object(
+        'item_id', (select id from public.inventory_items where name = 'Vaso 940 ml'),
+        'qty_purchase', 0.4,
+        'total_cost', 10
+      ),
+      jsonb_build_object(
+        'item_id', (select id from public.inventory_items where name = 'Tapa 940 ml'),
+        'qty_purchase', 0.4,
+        'total_cost', 10
+      ),
+      jsonb_build_object(
+        'item_id', (select id from public.inventory_items where name = 'Popote'),
+        'qty_purchase', 0.1,
+        'total_cost', 10
+      ),
+      jsonb_build_object(
+        'item_id', (select id from public.inventory_items where name = 'Hielo'),
+        'qty_purchase', 0.4,
+        'total_cost', 20
+      )
+    ),
+    'supplies',
+    'cash',
+    '',
+    'Carga de prueba'
+  ) is not null,
+  'admin loads event inventory'
+);
+
+select extensions.is(
+  (
+    select current_qty_base
+    from public.v_event_inventory_stock
+    where event_id = (select id from public.events where name = 'Test Evento Parque')
+      and item_name = 'Vaso 940 ml'
+  ),
+  10::numeric,
+  'event load adds cups to stock'
+);
+
+select extensions.is(
+  (
+    select amount
+    from public.event_expenses
+    where event_id = (select id from public.events where name = 'Test Evento Parque')
+      and description like 'Carga de inventario%'
+    order by created_at desc
+    limit 1
+  ),
+  150::numeric,
+  'event load creates an automatic expense'
+);
+
+select public.create_event_inventory_load(
+  '13131313-1313-4313-8313-131313131313'::uuid,
+  (select id from public.events where name = 'Test Evento Parque'),
+  jsonb_build_array(
+    jsonb_build_object(
+      'item_id', (select id from public.inventory_items where name = 'Vaso 940 ml'),
+      'qty_purchase', 10,
+      'total_cost', 10
+    )
+  ),
+  'supplies',
+  'cash',
+  '',
+  ''
+);
+
+select extensions.is(
+  (
+    select count(*)::integer
+    from public.event_inventory_loads
+    where event_id = (select id from public.events where name = 'Test Evento Parque')
+  ),
+  1,
+  'duplicate event inventory load is idempotent'
+);
+
+select public.create_event_sale(
+  '14141414-1414-4414-8414-141414141414'::uuid,
+  (select id from public.events where name = 'Test Evento Parque'),
+  jsonb_build_array(
+    jsonb_build_object(
+      'product_id', (select id from public.products where name = 'Test Barman Drink'),
+      'product_name', 'Test Barman Drink',
+      'quantity', 1,
+      'unit_price', 100,
+      'promotion_eligible', true
+    )
+  ),
+  false,
+  2,
+  180,
+  'cash',
+  '',
+  '2026-11-14T22:00:00-05:00'::timestamptz
+);
+
+select extensions.is(
+  (
+    select jsonb_object_agg(item_name, round(current_qty_base, 2))
+    from public.v_event_inventory_stock
+    where event_id = (select id from public.events where name = 'Test Evento Parque')
+  ),
+  '{"Test Barman Ron":1470,"Vaso 940 ml":9,"Tapa 940 ml":9,"Popote":9,"Hielo":1181}'::jsonb,
+  'event sale consumes recipe, consumables and ice'
+);
+
+select extensions.is(
+  (
+    select count(*)::integer
+    from public.event_inventory_movements
+    where event_sale_id = (
+      select id from public.event_sales
+      where client_id = '14141414-1414-4414-8414-141414141414'::uuid
+    )
+      and movement_type = 'consumption'
+  ),
+  5,
+  'event sale records consumption movements'
+);
+
+select public.create_event_sale(
+  '14141414-1414-4414-8414-141414141414'::uuid,
+  (select id from public.events where name = 'Test Evento Parque'),
+  jsonb_build_array(
+    jsonb_build_object(
+      'product_id', (select id from public.products where name = 'Test Barman Drink'),
+      'product_name', 'Test Barman Drink',
+      'quantity', 1,
+      'unit_price', 100,
+      'promotion_eligible', true
+    )
+  ),
+  false,
+  2,
+  180,
+  'cash',
+  '',
+  '2026-11-14T22:00:00-05:00'::timestamptz
+);
+
+select extensions.is(
+  (
+    select current_qty_base
+    from public.v_event_inventory_stock
+    where event_id = (select id from public.events where name = 'Test Evento Parque')
+      and item_name = 'Vaso 940 ml'
+  ),
+  9::numeric,
+  'duplicate sale does not double consume event inventory'
+);
+
+select public.delete_event_sale((
+  select id from public.event_sales
+  where client_id = '14141414-1414-4414-8414-141414141414'::uuid
+));
+
+select extensions.is(
+  (
+    select jsonb_object_agg(item_name, round(current_qty_base, 2))
+    from public.v_event_inventory_stock
+    where event_id = (select id from public.events where name = 'Test Evento Parque')
+  ),
+  '{"Test Barman Ron":1500,"Vaso 940 ml":10,"Tapa 940 ml":10,"Popote":10,"Hielo":2000}'::jsonb,
+  'deleting a sale reverses event inventory consumption'
+);
+
+select public.adjust_event_inventory_item(
+  (select id from public.events where name = 'Test Evento Parque'),
+  (select id from public.inventory_items where name = 'Vaso 940 ml'),
+  8,
+  'Conteo de prueba'
+);
+
+select extensions.is(
+  (
+    select current_qty_base
+    from public.v_event_inventory_stock
+    where event_id = (select id from public.events where name = 'Test Evento Parque')
+      and item_name = 'Vaso 940 ml'
+  ),
+  8::numeric,
+  'event inventory adjustment updates stock'
+);
+
+select extensions.throws_ok(
+  $sql$
+    select public.transfer_event_inventory_to_general(
+      (select id from public.events where name = 'Test Evento Parque'),
+      (select id from public.inventory_items where name = 'Vaso 940 ml'),
+      3,
+      ''
+    )
+  $sql$,
+  '22023',
+  'Cierra el evento antes de transferir sobrantes',
+  'event inventory transfer requires a closed event'
+);
+
+select public.set_event_status(
+  (select id from public.events where name = 'Test Evento Parque'),
+  'closed'
+);
+
+select public.transfer_event_inventory_to_general(
+  (select id from public.events where name = 'Test Evento Parque'),
+  (select id from public.inventory_items where name = 'Vaso 940 ml'),
+  3,
+  'Sobrantes de prueba'
+);
+
+select extensions.is(
+  (
+    select current_qty_base
+    from public.v_event_inventory_stock
+    where event_id = (select id from public.events where name = 'Test Evento Parque')
+      and item_name = 'Vaso 940 ml'
+  ),
+  5::numeric,
+  'event inventory transfer reduces event stock'
+);
+
+select extensions.is(
+  (
+    select qty_base
+    from public.inventory_movements
+    where event_id = (select id from public.events where name = 'Test Evento Parque')
+      and item_id = (select id from public.inventory_items where name = 'Vaso 940 ml')
+      and movement_type = 'transfer'
+    order by created_at desc
+    limit 1
+  ),
+  3::numeric,
+  'event inventory transfer increases general stock'
+);
+
+select extensions.throws_ok(
+  $sql$
+    select public.delete_event_expense((
+      select event_expense_id
+      from public.event_inventory_loads
+      where client_id = '13131313-1313-4313-8313-131313131313'::uuid
+    ))
+  $sql$,
+  '22023',
+  'Este gasto está ligado a una carga de inventario del evento',
+  'linked inventory expense cannot be deleted directly'
 );
 
 select public.admin_set_profile(
