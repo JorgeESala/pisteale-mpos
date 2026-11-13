@@ -32,6 +32,7 @@ export function PurchasesPage() {
   const {
     control,
     register,
+    setValue,
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm<PurchaseForm>({
@@ -41,7 +42,7 @@ export function PurchasesPage() {
       supplier: '',
       invoiceRef: '',
       notes: '',
-      items: [{ itemId: '', qtyPurchase: 1, totalCost: 0 }],
+      items: [{ itemId: '', qtyPurchase: 1, purchaseFactor: 1, totalCost: 0 }],
     },
   })
 
@@ -67,6 +68,7 @@ export function PurchasesPage() {
         items: values.items.map((item) => ({
           itemId: item.itemId,
           qtyPurchase: item.qtyPurchase,
+          purchaseFactor: item.purchaseFactor,
           totalCost: item.totalCost,
         })),
       }),
@@ -193,7 +195,9 @@ export function PurchasesPage() {
               <h3 className="text-sm font-medium text-neutral-200">Insumos</h3>
               <button
                 type="button"
-                onClick={() => append({ itemId: '', qtyPurchase: 1, totalCost: 0 })}
+                onClick={() =>
+                  append({ itemId: '', qtyPurchase: 1, purchaseFactor: 1, totalCost: 0 })
+                }
                 className="rounded-xl border border-neutral-700 px-3 py-2 text-sm text-neutral-300 transition hover:border-neutral-500"
               >
                 Agregar línea
@@ -204,8 +208,9 @@ export function PurchasesPage() {
               const watched = watchedItems[index]
               const item = watched ? itemById.get(watched.itemId) : undefined
               const qtyPurchase = Number(watched?.qtyPurchase) || 0
+              const purchaseFactor = Number(watched?.purchaseFactor) || 0
               const totalCost = Number(watched?.totalCost) || 0
-              const qtyBase = item ? qtyPurchase * item.purchase_factor : 0
+              const qtyBase = item ? qtyPurchase * purchaseFactor : 0
               const unitCostBase = qtyBase > 0 ? totalCost / qtyBase : 0
               const unitCostPurchase = qtyPurchase > 0 ? totalCost / qtyPurchase : 0
 
@@ -225,7 +230,16 @@ export function PurchasesPage() {
                       <select
                         id={`items.${index}.itemId`}
                         className="w-full rounded-xl border border-neutral-700 bg-neutral-900 px-3 py-3 text-base text-neutral-100 outline-none transition focus:border-brand-400"
-                        {...register(`items.${index}.itemId`)}
+                        {...register(`items.${index}.itemId`, {
+                          onChange: (event) => {
+                            const selected = itemById.get(event.target.value)
+                            if (selected) {
+                              setValue(`items.${index}.purchaseFactor`, selected.purchase_factor, {
+                                shouldValidate: true,
+                              })
+                            }
+                          },
+                        })}
                       >
                         <option value="">Selecciona un insumo</option>
                         {stockableItems.map((option) => (
@@ -297,6 +311,31 @@ export function PurchasesPage() {
                         </p>
                       ) : null}
                     </div>
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor={`items.${index}.purchaseFactor`}
+                      className="mb-1.5 block text-xs text-neutral-400"
+                    >
+                      Contenido por unidad ({item?.base_unit ?? 'base'})
+                    </label>
+                    <input
+                      id={`items.${index}.purchaseFactor`}
+                      type="number"
+                      min="0.0001"
+                      step="0.0001"
+                      className="w-full rounded-xl border border-neutral-700 bg-neutral-900 px-4 py-3 text-base text-neutral-100 outline-none transition focus:border-brand-400"
+                      {...register(`items.${index}.purchaseFactor`, { valueAsNumber: true })}
+                    />
+                    <p className="mt-1 text-[11px] text-neutral-500">
+                      Ej. caja de 1 L = 1000 ml. Si lo dejas vacío, se usa el contenido del insumo.
+                    </p>
+                    {errors.items?.[index]?.purchaseFactor ? (
+                      <p className="mt-1.5 text-sm text-red-400">
+                        {errors.items[index]?.purchaseFactor?.message}
+                      </p>
+                    ) : null}
                   </div>
 
                   {item ? (

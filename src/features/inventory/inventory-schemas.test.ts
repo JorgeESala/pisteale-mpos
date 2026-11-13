@@ -17,7 +17,7 @@ describe('purchaseFormSchema', () => {
       supplier: 'Proveedor',
       invoiceRef: 'F-001',
       notes: '',
-      items: [{ itemId, qtyPurchase: 2, totalCost: 100 }],
+      items: [{ itemId, qtyPurchase: 2, purchaseFactor: 750, totalCost: 100 }],
     })
 
     expect(result.success).toBe(true)
@@ -30,9 +30,21 @@ describe('purchaseFormSchema', () => {
       invoiceRef: '',
       notes: '',
       items: [
-        { itemId, qtyPurchase: 1, totalCost: 50 },
-        { itemId, qtyPurchase: 2, totalCost: 100 },
+        { itemId, qtyPurchase: 1, purchaseFactor: 750, totalCost: 50 },
+        { itemId, qtyPurchase: 2, purchaseFactor: 750, totalCost: 100 },
       ],
+    })
+
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects a non-positive content per unit', () => {
+    const result = purchaseFormSchema.safeParse({
+      purchaseDate: '2026-11-05',
+      supplier: '',
+      invoiceRef: '',
+      notes: '',
+      items: [{ itemId, qtyPurchase: 1, purchaseFactor: 0, totalCost: 50 }],
     })
 
     expect(result.success).toBe(false)
