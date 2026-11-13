@@ -4,9 +4,14 @@ import { useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '@/features/auth/auth-context'
+import { formatUnitCost } from '@/lib/format'
 import { supabase } from '@/lib/supabase'
 import { inventoryGroupFormSchema, type InventoryGroupForm } from './catalog-schemas'
-import { fetchInventoryCategories, fetchInventoryGroup } from './queries'
+import {
+  fetchInventoryCategories,
+  fetchInventoryGroup,
+  fetchInventoryGroupCostHistory,
+} from './queries'
 
 export function GroupFormPage() {
   const { id } = useParams<{ id: string }>()
@@ -28,6 +33,12 @@ export function GroupFormPage() {
     queryFn: fetchInventoryCategories,
   })
 
+  const historyQuery = useQuery({
+    queryKey: ['inventory_group_cost_history', groupId],
+    queryFn: () => fetchInventoryGroupCostHistory(groupId!),
+    enabled: Boolean(groupId),
+  })
+
   const {
     register,
     handleSubmit,
@@ -40,6 +51,7 @@ export function GroupFormPage() {
       categoryId: '',
       baseUnit: 'ml',
       isTiered: true,
+      referenceCost: null,
       active: true,
     },
   })
@@ -53,6 +65,7 @@ export function GroupFormPage() {
       categoryId: group.category_id ?? '',
       baseUnit: group.base_unit,
       isTiered: group.is_tiered,
+      referenceCost: group.reference_cost,
       active: group.active,
     })
   }, [groupQuery.data, categoriesQuery.data, reset])
@@ -72,11 +85,21 @@ export function GroupFormPage() {
 
       if (error) throw error
 
+      const { error: costError } = await supabase.rpc('set_inventory_group_reference_cost', {
+        p_group_id: data.id,
+        p_reference_cost: values.referenceCost,
+        p_note: 'Costo editado desde el formulario del grupo',
+        p_source: 'manual',
+      })
+
+      if (costError) throw costError
+
       return { group: data, created: isNew }
     },
     onSuccess: ({ group, created }) => {
       void queryClient.invalidateQueries({ queryKey: ['inventory_groups'] })
       void queryClient.invalidateQueries({ queryKey: ['inventory_group', group.id] })
+      void queryClient.invalidateQueries({ queryKey: ['inventory_group_cost_history', group.id] })
       void queryClient.invalidateQueries({ queryKey: ['inventory_items'] })
 
       if (created) {
@@ -180,6 +203,30 @@ export function GroupFormPage() {
           </select>
         </div>
 
+        <div>
+          <label htmlFor="referenceCost" className="mb-1.5 block text-sm text-neutral-300">
+            Costo de referencia por unidad base
+          </label>
+          <input
+            id="referenceCost"
+            type="number"
+            min="0"
+            step="0.0001"
+            placeholder="Ej. 0.1830"
+            className="w-full rounded-xl border border-neutral-700 bg-neutral-950 px-4 py-3 text-base text-neutral-100 outline-none transition focus:border-brand-400"
+            {...register('referenceCost', {
+              setValueAs: (value) => (value === '' ? null : Number(value)),
+            })}
+          />
+          <p className="mt-1 text-[11px] text-neutral-500">
+            Se usa para costear recetas. No mueve inventario. Puedes borrarlo para usar el promedio
+            real.
+          </p>
+          {errors.referenceCost ? (
+            <p className="mt-1.5 text-sm text-red-400">{errors.referenceCost.message}</p>
+          ) : null}
+        </div>
+
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label htmlFor="baseUnit" className="mb-1.5 block text-sm text-neutral-300">
@@ -236,6 +283,32 @@ export function GroupFormPage() {
           {isSubmitting ? 'Guardando…' : 'Guardar grupo'}
         </button>
       </form>
+
+      {!isNew && historyQuery.data && historyQuery.data.length > 0 ? (
+        <section className="rounded-2xl border border-neutral-800 bg-neutral-900 p-4">
+          <h2 className="font-semibold">Historial de costo de referencia</h2>
+          <div className="mt-3 space-y-2">
+            {historyQuery.data.map((entry) => (
+              <div
+                key={entry.id}
+                className="rounded-xl border border-neutral-800 bg-neutral-950 px-3 py-2 text-sm"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-neutral-300">
+                    {entry.old_cost === null ? 'Sin costo' : formatUnitCost(entry.old_cost)}
+                    {' → '}
+                    {entry.new_cost === null ? 'Sin costo' : formatUnitCost(entry.new_cost)}
+                  </span>
+                  <span className="text-xs text-neutral-500">
+                    {new Date(entry.created_at).toLocaleDateString('es-MX')}
+                  </span>
+                </div>
+                {entry.note ? <p className="mt-1 text-xs text-neutral-500">{entry.note}</p> : null}
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
     </div>
   )
 }

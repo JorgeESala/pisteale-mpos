@@ -30,6 +30,7 @@ export const inventoryGroupFormSchema = z.object({
   categoryId: z.string(),
   baseUnit: z.enum(['ml', 'g', 'pza']),
   isTiered: z.boolean(),
+  referenceCost: z.number().min(0, 'Costo inválido').nullable(),
   active: z.boolean(),
 })
 
