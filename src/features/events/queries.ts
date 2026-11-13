@@ -314,6 +314,7 @@ export type CreateEventInventoryLoadInput = {
   items: Array<{
     itemId: string
     qtyPurchase: number
+    purchaseFactor: number
     totalCost: number
   }>
   category: EventExpenseCategory
@@ -331,6 +332,7 @@ export async function createEventInventoryLoad(
     p_items: input.items.map((item) => ({
       item_id: item.itemId,
       qty_purchase: item.qtyPurchase,
+      purchase_factor: item.purchaseFactor,
       total_cost: item.totalCost,
     })),
     p_category: input.category,

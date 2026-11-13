@@ -116,6 +116,7 @@ describe('event inventory schemas', () => {
         {
           itemId: '11111111-1111-4111-8111-111111111111',
           qtyPurchase: 50,
+          purchaseFactor: 1,
           totalCost: 100,
         },
       ],
@@ -126,6 +127,25 @@ describe('event inventory schemas', () => {
     })
 
     expect(result.success).toBe(true)
+  })
+
+  it('rejects a load with invalid content per unit', () => {
+    const result = eventInventoryLoadFormSchema.safeParse({
+      items: [
+        {
+          itemId: '11111111-1111-4111-8111-111111111111',
+          qtyPurchase: 1,
+          purchaseFactor: 0,
+          totalCost: 10,
+        },
+      ],
+      category: 'supplies',
+      paymentMethod: 'cash',
+      reference: '',
+      notes: '',
+    })
+
+    expect(result.success).toBe(false)
   })
 
   it('validates adjustments and transfers', () => {

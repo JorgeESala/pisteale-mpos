@@ -69,6 +69,7 @@ export type EventExpenseForm = z.infer<typeof eventExpenseFormSchema>
 export const eventInventoryItemSchema = z.object({
   itemId: z.string().uuid('Selecciona un insumo'),
   qtyPurchase: z.number().positive('Cantidad inválida'),
+  purchaseFactor: z.number().positive('Contenido inválido'),
   totalCost: z.number().min(0, 'Costo inválido'),
 })
 

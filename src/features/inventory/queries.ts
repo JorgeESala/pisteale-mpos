@@ -151,6 +151,7 @@ export async function fetchPurchaseItems(purchaseId: string): Promise<PurchaseIt
 export type CreatePurchaseItemInput = {
   itemId: string
   qtyPurchase: number
+  purchaseFactor: number
   totalCost: number
 }
 
@@ -171,6 +172,7 @@ export async function createPurchase(input: CreatePurchaseInput): Promise<string
     p_items: input.items.map((item) => ({
       item_id: item.itemId,
       qty_purchase: item.qtyPurchase,
+      purchase_factor: item.purchaseFactor,
       total_cost: item.totalCost,
     })),
   })

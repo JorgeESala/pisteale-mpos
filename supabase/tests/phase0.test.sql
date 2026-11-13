@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select extensions.plan(196);
+select extensions.plan(199);
 
 delete from auth.users
 where id in (
@@ -1541,6 +1541,65 @@ select public.create_purchase(
   )
 );
 
+select public.upsert_inventory_group(
+  '99999999-9999-4999-8999-999999999998'::uuid,
+  'Test Contenido',
+  null,
+  'pza',
+  false,
+  true
+);
+
+select public.upsert_inventory_item(
+  null,
+  (select id from public.inventory_item_groups where name = 'Test Contenido'),
+  'Test Contenido Compra',
+  null,
+  'consumible',
+  'caja',
+  10,
+  0.5,
+  0,
+  true,
+  true
+);
+
+select public.create_purchase(
+  current_date,
+  'Proveedor contenido',
+  'C-001',
+  '',
+  jsonb_build_array(
+    jsonb_build_object(
+      'item_id', (select id from public.inventory_items where name = 'Test Contenido Compra'),
+      'qty_purchase', 2,
+      'purchase_factor', 20,
+      'total_cost', 100
+    )
+  )
+);
+
+select extensions.is(
+  (
+    select purchase_factor
+    from public.purchase_items
+    where item_id = (select id from public.inventory_items where name = 'Test Contenido Compra')
+  ),
+  20::numeric,
+  'purchase stores per-line content'
+);
+
+select extensions.is(
+  (
+    select qty_base
+    from public.inventory_movements
+    where item_id = (select id from public.inventory_items where name = 'Test Contenido Compra')
+      and movement_type = 'purchase'
+  ),
+  40::numeric,
+  'purchase converts per-line content to base quantity'
+);
+
 reset role;
 
 set local role authenticated;
@@ -3022,6 +3081,34 @@ select extensions.throws_ok(
   '22023',
   'Este gasto está ligado a una carga de inventario del evento',
   'linked inventory expense cannot be deleted directly'
+);
+
+select public.create_event_inventory_load(
+  '15151515-1515-4515-8515-151515151515'::uuid,
+  (select id from public.events where name = 'Test Evento Nocturno'),
+  jsonb_build_array(
+    jsonb_build_object(
+      'item_id', (select id from public.inventory_items where name = 'Vaso 940 ml'),
+      'qty_purchase', 0.5,
+      'purchase_factor', 20,
+      'total_cost', 10
+    )
+  ),
+  'supplies',
+  'cash',
+  '',
+  'Contenido por unidad'
+);
+
+select extensions.is(
+  (
+    select current_qty_base
+    from public.v_event_inventory_stock
+    where event_id = (select id from public.events where name = 'Test Evento Nocturno')
+      and item_name = 'Vaso 940 ml'
+  ),
+  10::numeric,
+  'event load uses per-line content'
 );
 
 select public.admin_set_profile(
