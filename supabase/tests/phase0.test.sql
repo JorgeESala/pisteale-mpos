@@ -1541,13 +1541,22 @@ select public.create_purchase(
   )
 );
 
+select public.upsert_inventory_group(
+  '99999999-9999-4999-8999-999999999998'::uuid,
+  'Test Contenido',
+  null,
+  'pza',
+  false,
+  true
+);
+
 select public.upsert_inventory_item(
   null,
-  (select id from public.inventory_item_groups where name = 'Test Barman'),
+  (select id from public.inventory_item_groups where name = 'Test Contenido'),
   'Test Contenido Compra',
   null,
-  'ingrediente',
-  'botella',
+  'consumible',
+  'caja',
   10,
   0.5,
   0,
