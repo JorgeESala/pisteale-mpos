@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '@/features/auth/auth-context'
+import { formatUnitCost } from '@/lib/format'
 import { fetchInventoryGroups } from './queries'
 
 export function GroupsPage() {
@@ -78,9 +79,14 @@ export function GroupsPage() {
                     {group.category_name ?? 'Sin categoría'} · {group.base_unit}
                   </p>
                 </div>
-                <span className="shrink-0 rounded-full bg-neutral-800 px-2 py-1 text-[11px] text-neutral-400">
-                  {group.item_count} insumos
-                </span>
+                <div className="shrink-0 text-right">
+                  <p className="text-sm font-semibold text-neutral-200">
+                    {group.reference_cost === null
+                      ? 'Sin referencia'
+                      : formatUnitCost(group.reference_cost)}
+                  </p>
+                  <p className="text-[10px] text-neutral-500">/{group.base_unit}</p>
+                </div>
               </div>
 
               <div className="mt-3 flex flex-wrap gap-2 text-[11px]">

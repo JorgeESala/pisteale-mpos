@@ -60,18 +60,20 @@ function groupUnitCost(
   if (!group) return null
 
   if (!group.is_tiered || tierRule === 'any') {
-    return group.all_avg_cost
+    return group.reference_cost ?? group.all_avg_cost
   }
 
   if (tierRule === 'estandar') {
-    return group.standard_avg_cost
+    return group.reference_cost ?? group.standard_avg_cost
   }
 
   if (tierRule === 'premium') {
     return group.premium_avg_cost
   }
 
-  return tier === 'premium' ? group.premium_avg_cost : group.standard_avg_cost
+  return tier === 'premium'
+    ? group.premium_avg_cost
+    : (group.reference_cost ?? group.standard_avg_cost)
 }
 
 export function RecipeEditor({ product }: { product: Product }) {
@@ -328,7 +330,8 @@ export function RecipeEditor({ product }: { product: Product }) {
         <div>
           <h2 className="font-semibold">Receta</h2>
           <p className="mt-1 text-sm text-neutral-400">
-            Elige el grupo, la regla de tier y la cantidad. Puedes capturar en ml u oz.
+            Elige el grupo, la regla de tier y la cantidad. Puedes capturar ml, oz o fracciones de
+            pieza.
           </p>
         </div>
         <span
@@ -525,8 +528,8 @@ export function RecipeEditor({ product }: { product: Product }) {
 
                   <input
                     type="number"
-                    min="0.01"
-                    step="0.01"
+                    min="0.0001"
+                    step="0.0001"
                     className="rounded-lg border border-neutral-700 bg-neutral-900 px-2 py-2.5 text-sm text-neutral-100 outline-none focus:border-brand-400"
                     {...register(`items.${index}.qty`, { valueAsNumber: true })}
                   />

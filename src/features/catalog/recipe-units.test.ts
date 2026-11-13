@@ -20,6 +20,8 @@ describe('recipe units', () => {
     expect(recipeQuantityToBase(250, 'ml')).toBe(250)
     expect(recipeQuantityToBase(5, 'g')).toBe(5)
     expect(recipeQuantityToBase(1, 'pza')).toBe(1)
+    expect(recipeQuantityToBase(0.8333, 'pza')).toBe(0.8333)
+    expect(recipeQuantityToBase(0.1667, 'pza')).toBe(0.1667)
   })
 
   it('limits units by base unit', () => {

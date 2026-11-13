@@ -5,6 +5,7 @@ import type {
   InventoryCategory,
   InventoryGroup,
   InventoryGroupCost,
+  InventoryGroupCostHistory,
   InventoryItemView,
   Product,
   ProductCategory,
@@ -68,6 +69,21 @@ export async function fetchInventoryGroup(id: string): Promise<InventoryGroup | 
     .select('*')
     .eq('id', id)
     .maybeSingle()
+
+  if (error) throw error
+
+  return data
+}
+
+export async function fetchInventoryGroupCostHistory(
+  groupId: string,
+): Promise<InventoryGroupCostHistory[]> {
+  const { data, error } = await supabase
+    .from('v_inventory_group_cost_history')
+    .select('*')
+    .eq('group_id', groupId)
+    .order('created_at', { ascending: false })
+    .limit(10)
 
   if (error) throw error
 

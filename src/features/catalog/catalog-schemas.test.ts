@@ -52,6 +52,7 @@ describe('inventoryGroupFormSchema', () => {
       categoryId: '',
       baseUnit: 'ml',
       isTiered: true,
+      referenceCost: null,
       active: true,
     })
 
@@ -64,6 +65,7 @@ describe('inventoryGroupFormSchema', () => {
       categoryId: '',
       baseUnit: 'ml',
       isTiered: true,
+      referenceCost: null,
       active: true,
     })
 
