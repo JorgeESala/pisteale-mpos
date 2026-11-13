@@ -3,6 +3,7 @@ import { z } from 'zod'
 export const purchaseItemFormSchema = z.object({
   itemId: z.string().uuid('Selecciona un insumo'),
   qtyPurchase: z.number().positive('Cantidad inválida'),
+  purchaseFactor: z.number().positive('Contenido inválido'),
   totalCost: z.number().min(0, 'Costo inválido'),
 })
 
