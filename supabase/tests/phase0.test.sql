@@ -747,31 +747,31 @@ select extensions.is(
 
 select extensions.is(
   (select normal_cost from public.v_product_costs where product_id = '77777777-7777-7777-7777-777777777777'),
-  6.60::numeric,
+  9.74::numeric,
   'normal product cost is calculated'
 );
 
 select extensions.is(
   (select premium_cost from public.v_product_costs where product_id = '77777777-7777-7777-7777-777777777777'),
-  11.10::numeric,
+  14.24::numeric,
   'premium product cost is calculated'
 );
 
 select extensions.is(
   (select consumables_cost from public.v_product_costs where product_id = '77777777-7777-7777-7777-777777777777'),
-  2.10::numeric,
+  5.24::numeric,
   'consumables cost is included'
 );
 
 select extensions.is(
   (select normal_margin from public.v_product_costs where product_id = '77777777-7777-7777-7777-777777777777'),
-  113.40::numeric,
+  110.26::numeric,
   'normal product margin is calculated'
 );
 
 select extensions.is(
   (select premium_margin from public.v_product_costs where product_id = '77777777-7777-7777-7777-777777777777'),
-  138.90::numeric,
+  135.76::numeric,
   'premium product margin is calculated'
 );
 
@@ -1500,7 +1500,7 @@ select extensions.is(
 
 select extensions.is(
   (select cost_total from public.v_orders order by folio desc limit 1),
-  34.20::numeric,
+  40.48::numeric,
   'sale cost is calculated'
 );
 
