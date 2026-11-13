@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select extensions.plan(190);
+select extensions.plan(196);
 
 delete from auth.users
 where id in (
@@ -582,6 +582,104 @@ select extensions.is(
   ),
   'premium',
   'admin creates premium item'
+);
+
+select public.upsert_inventory_group(
+  '99999999-9999-4999-8999-999999999999'::uuid,
+  'Test Costo Referencia',
+  null,
+  'ml',
+  false,
+  true
+);
+
+select extensions.is(
+  (
+    select (public.set_inventory_group_reference_cost(
+      '99999999-9999-4999-8999-999999999999'::uuid,
+      0.1234,
+      'Prueba de costo',
+      'test'
+    )).reference_cost
+  ),
+  0.1234::numeric,
+  'admin sets a group reference cost'
+);
+
+select extensions.is(
+  (
+    select new_cost
+    from public.inventory_group_cost_history
+    where group_id = '99999999-9999-4999-8999-999999999999'::uuid
+    order by created_at desc
+    limit 1
+  ),
+  0.1234::numeric,
+  'reference cost change is recorded in history'
+);
+
+select extensions.is(
+  (
+    select reference_cost
+    from public.v_inventory_group_costs
+    where group_id = '99999999-9999-4999-8999-999999999999'::uuid
+  ),
+  0.1234::numeric,
+  'reference cost is exposed in the group cost view'
+);
+
+select extensions.throws_ok(
+  $sql$select public.set_inventory_group_reference_cost('99999999-9999-4999-8999-999999999999'::uuid, -1, '', 'test')$sql$,
+  '22023',
+  'Costo inválido',
+  'negative reference cost is rejected'
+);
+
+reset role;
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claim.sub',
+  '22222222-2222-2222-2222-222222222222',
+  true
+);
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"22222222-2222-2222-2222-222222222222","role":"authenticated"}',
+  true
+);
+
+select extensions.throws_ok(
+  $sql$select public.set_inventory_group_reference_cost('99999999-9999-4999-8999-999999999999'::uuid, 0.2, '', 'test')$sql$,
+  '42501',
+  'No autorizado',
+  'operator cannot set a group reference cost'
+);
+
+reset role;
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claim.sub',
+  '11111111-1111-1111-1111-111111111111',
+  true
+);
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"11111111-1111-1111-1111-111111111111","role":"authenticated"}',
+  true
+);
+
+select extensions.ok(
+  (
+    select (public.set_inventory_group_reference_cost(
+      '99999999-9999-4999-8999-999999999999'::uuid,
+      null,
+      '',
+      'test'
+    )).reference_cost is null
+  ),
+  'reference cost can be cleared'
 );
 
 reset role;

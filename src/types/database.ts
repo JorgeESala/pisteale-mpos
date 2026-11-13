@@ -76,6 +76,10 @@ export type InventoryGroup = {
   base_unit: BaseUnit
   is_tiered: boolean
   active: boolean
+  reference_cost: number | null
+  reference_cost_updated_at: string | null
+  reference_cost_note: string
+  reference_cost_source: string
   created_at: string
   updated_at: string
 }
@@ -95,6 +99,23 @@ export type InventoryGroupCost = {
   all_cost_count: number
   standard_cost_count: number
   premium_cost_count: number
+  reference_cost: number | null
+  reference_cost_updated_at: string | null
+  reference_cost_note: string
+  reference_cost_source: string
+}
+
+export type InventoryGroupCostHistory = {
+  id: string
+  group_id: string
+  group_name: string
+  old_cost: number | null
+  new_cost: number | null
+  note: string
+  source: string
+  created_by: string | null
+  created_by_name: string | null
+  created_at: string
 }
 
 export type InventoryItem = {
@@ -1008,6 +1029,10 @@ export type Database = {
         Row: InventoryGroupCost
         Relationships: []
       }
+      v_inventory_group_cost_history: {
+        Row: InventoryGroupCostHistory
+        Relationships: []
+      }
       v_inventory_items: {
         Row: InventoryItemView
         Relationships: []
@@ -1280,6 +1305,15 @@ export type Database = {
           p_base_unit: BaseUnit
           p_is_tiered: boolean
           p_active: boolean
+        }
+        Returns: InventoryGroup
+      }
+      set_inventory_group_reference_cost: {
+        Args: {
+          p_group_id: string
+          p_reference_cost: number | null
+          p_note: string
+          p_source: string
         }
         Returns: InventoryGroup
       }
