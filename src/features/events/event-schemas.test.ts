@@ -3,6 +3,7 @@ import {
   eventExpenseFormSchema,
   eventFormSchema,
   eventInventoryAdjustSchema,
+  eventInventoryLoadEditSchema,
   eventInventoryLoadFormSchema,
   eventInventoryTransferSchema,
   eventSaleFormSchema,
@@ -146,6 +147,28 @@ describe('event inventory schemas', () => {
     })
 
     expect(result.success).toBe(false)
+  })
+
+  it('requires a date when editing a load', () => {
+    const base = {
+      items: [
+        {
+          itemId: '11111111-1111-4111-8111-111111111111',
+          qtyPurchase: 4,
+          purchaseFactor: 1000,
+          totalCost: 770,
+        },
+      ],
+      category: 'supplies',
+      paymentMethod: 'cash',
+      reference: '',
+      notes: '',
+    }
+
+    expect(eventInventoryLoadEditSchema.safeParse(base).success).toBe(false)
+    expect(
+      eventInventoryLoadEditSchema.safeParse({ ...base, spentAt: '2026-11-14T20:00' }).success,
+    ).toBe(true)
   })
 
   it('validates adjustments and transfers', () => {

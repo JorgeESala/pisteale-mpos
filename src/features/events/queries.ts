@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase'
 import type {
   EventExpenseCategory,
+  EventFinanceEditView,
   EventInventoryLoadView,
   EventInventoryMovementView,
   EventInventoryStock,
@@ -275,14 +276,58 @@ export async function deleteEventExpense(expenseId: string): Promise<void> {
   if (error) throw error
 }
 
+export type UpdateEventExpenseInput = {
+  expenseId: string
+  eventId: string
+  category: EventExpenseCategory
+  description: string
+  amount: number
+  paymentMethod: PaymentMethod
+  reference: string
+  spentAt: string
+  notes: string
+}
+
+export async function updateEventExpense(input: UpdateEventExpenseInput): Promise<string> {
+  const { data, error } = await supabase.rpc('update_event_expense', {
+    p_id: input.expenseId,
+    p_event_id: input.eventId,
+    p_category: input.category,
+    p_description: input.description,
+    p_amount: input.amount,
+    p_payment_method: input.paymentMethod,
+    p_reference: input.reference,
+    p_spent_at: input.spentAt,
+    p_notes: input.notes,
+  })
+
+  if (error) throw error
+
+  return data
+}
+
+export async function fetchEventFinanceEdits(eventId: string): Promise<EventFinanceEditView[]> {
+  const { data, error } = await supabase
+    .from('v_event_finance_edits')
+    .select('*')
+    .eq('event_id', eventId)
+    .order('edited_at', { ascending: false })
+    .limit(100)
+
+  if (error) throw error
+
+  return data
+}
+
 export type EventInventoryBundle = {
   stock: EventInventoryStock[]
   loads: EventInventoryLoadView[]
   movements: EventInventoryMovementView[]
+  loadLines: EventInventoryMovementView[]
 }
 
 export async function fetchEventInventory(eventId: string): Promise<EventInventoryBundle> {
-  const [stockResult, loadsResult, movementsResult] = await Promise.all([
+  const [stockResult, loadsResult, movementsResult, loadLinesResult] = await Promise.all([
     supabase.from('v_event_inventory_stock').select('*').eq('event_id', eventId).order('item_name'),
     supabase
       .from('v_event_inventory_loads')
@@ -295,16 +340,24 @@ export async function fetchEventInventory(eventId: string): Promise<EventInvento
       .eq('event_id', eventId)
       .order('occurred_at', { ascending: false })
       .limit(100),
+    supabase
+      .from('v_event_inventory_movements')
+      .select('*')
+      .eq('event_id', eventId)
+      .eq('movement_type', 'purchase')
+      .order('occurred_at', { ascending: false }),
   ])
 
   if (stockResult.error) throw stockResult.error
   if (loadsResult.error) throw loadsResult.error
   if (movementsResult.error) throw movementsResult.error
+  if (loadLinesResult.error) throw loadLinesResult.error
 
   return {
     stock: stockResult.data,
     loads: loadsResult.data,
     movements: movementsResult.data,
+    loadLines: loadLinesResult.data,
   }
 }
 
@@ -339,6 +392,46 @@ export async function createEventInventoryLoad(
     p_payment_method: input.paymentMethod,
     p_reference: input.reference,
     p_notes: input.notes,
+  })
+
+  if (error) throw error
+
+  return data
+}
+
+export type UpdateEventInventoryLoadInput = {
+  loadId: string
+  eventId: string
+  items: Array<{
+    itemId: string
+    qtyPurchase: number
+    purchaseFactor: number
+    totalCost: number
+  }>
+  category: EventExpenseCategory
+  paymentMethod: PaymentMethod
+  reference: string
+  notes: string
+  spentAt: string
+}
+
+export async function updateEventInventoryLoad(
+  input: UpdateEventInventoryLoadInput,
+): Promise<string> {
+  const { data, error } = await supabase.rpc('update_event_inventory_load', {
+    p_load_id: input.loadId,
+    p_event_id: input.eventId,
+    p_items: input.items.map((item) => ({
+      item_id: item.itemId,
+      qty_purchase: item.qtyPurchase,
+      purchase_factor: item.purchaseFactor,
+      total_cost: item.totalCost,
+    })),
+    p_category: input.category,
+    p_payment_method: input.paymentMethod,
+    p_reference: input.reference,
+    p_notes: input.notes,
+    p_spent_at: input.spentAt,
   })
 
   if (error) throw error
