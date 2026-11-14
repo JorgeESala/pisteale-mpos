@@ -83,6 +83,12 @@ export const eventInventoryLoadFormSchema = z.object({
 
 export type EventInventoryLoadForm = z.infer<typeof eventInventoryLoadFormSchema>
 
+export const eventInventoryLoadEditSchema = eventInventoryLoadFormSchema.extend({
+  spentAt: z.string().min(1, 'La fecha es obligatoria'),
+})
+
+export type EventInventoryLoadEditForm = z.infer<typeof eventInventoryLoadEditSchema>
+
 export const eventInventoryAdjustSchema = z.object({
   countedQtyBase: z.number().min(0, 'El conteo no puede ser negativo'),
   notes: z.string().max(1000, 'Máximo 1000 caracteres'),

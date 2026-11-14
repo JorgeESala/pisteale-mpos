@@ -663,12 +663,33 @@ export type EventExpense = {
   created_by: string | null
   created_at: string
   updated_at: string
+  updated_by: string | null
+  updated_by_name: string | null
 }
 
 export type EventExpenseView = EventExpense & {
   event_folio: string
   event_name: string
   created_by_name: string | null
+  inventory_load_id: string | null
+}
+
+export type EventFinanceEdit = {
+  id: string
+  event_id: string
+  entity_type: 'inventory_load' | 'expense'
+  entity_id: string
+  edited_by: string | null
+  edited_by_name: string | null
+  edited_at: string
+  summary: string
+  before_data: Json
+  after_data: Json
+}
+
+export type EventFinanceEditView = EventFinanceEdit & {
+  event_folio: string
+  event_name: string
 }
 
 export type EventInventoryMovementType =
@@ -686,12 +707,16 @@ export type EventInventoryLoad = {
   event_expense_id: string | null
   created_by: string | null
   created_at: string
+  updated_by: string | null
+  updated_by_name: string | null
+  updated_at: string | null
 }
 
 export type EventInventoryLoadView = EventInventoryLoad & {
   event_folio: string
   event_name: string
   created_by_name: string | null
+  spent_at: string | null
 }
 
 export type EventInventoryMovement = {
@@ -931,6 +956,12 @@ export type Database = {
         Update: never
         Relationships: []
       }
+      event_finance_edits: {
+        Row: EventFinanceEdit
+        Insert: never
+        Update: never
+        Relationships: []
+      }
       event_inventory_loads: {
         Row: EventInventoryLoad
         Insert: never
@@ -1023,6 +1054,10 @@ export type Database = {
       }
       v_event_inventory_stock: {
         Row: EventInventoryStock
+        Relationships: []
+      }
+      v_event_finance_edits: {
+        Row: EventFinanceEditView
         Relationships: []
       }
       v_inventory_group_costs: {
@@ -1255,6 +1290,33 @@ export type Database = {
       delete_event_expense: {
         Args: { p_id: string }
         Returns: undefined
+      }
+      update_event_expense: {
+        Args: {
+          p_id: string
+          p_event_id: string
+          p_category: EventExpenseCategory
+          p_description: string
+          p_amount: number
+          p_payment_method: PaymentMethod
+          p_reference: string
+          p_spent_at: string
+          p_notes: string
+        }
+        Returns: string
+      }
+      update_event_inventory_load: {
+        Args: {
+          p_load_id: string
+          p_event_id: string
+          p_items: Json
+          p_category: EventExpenseCategory
+          p_payment_method: PaymentMethod
+          p_reference: string
+          p_notes: string
+          p_spent_at: string
+        }
+        Returns: string
       }
       upsert_promotion: {
         Args: {
