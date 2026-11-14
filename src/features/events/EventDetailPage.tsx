@@ -17,6 +17,7 @@ import {
   deleteEventExpense,
   deleteEventSale,
   fetchEventBundle,
+  fetchEventFinanceEdits,
   fetchEventProducts,
   fetchEvents,
   setEventStatus,
@@ -46,6 +47,7 @@ export function EventDetailPage() {
   const userId = profile?.id ?? null
   const online = useOnlineStatus()
   const canOperate = profile?.role === 'admin' || profile?.role === 'operador'
+  const canEdit = Boolean(profile)
   const isAdmin = profile?.role === 'admin'
   const { pendingSales, pendingExpenses, refresh: refreshPending } = useEventSync()
 
@@ -63,13 +65,21 @@ export function EventDetailPage() {
 
   const [offlineReady, setOfflineReady] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [editingExpense, setEditingExpense] = useState<EventExpenseView | null>(null)
 
   const eventPendingSales = pendingSales.filter((sale) => sale.eventId === eventId)
   const eventPendingExpenses = pendingExpenses.filter((expense) => expense.eventId === eventId)
 
+  const financeEditsQuery = useQuery({
+    queryKey: ['event_finance_edits', eventId],
+    queryFn: () => fetchEventFinanceEdits(eventId),
+    enabled: Boolean(eventId && online),
+  })
+
   const invalidateEvent = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ['event_bundle', eventId] })
     void queryClient.invalidateQueries({ queryKey: ['events'] })
+    void queryClient.invalidateQueries({ queryKey: ['event_finance_edits', eventId] })
   }, [eventId, queryClient])
 
   const statusMutation = useMutation({
@@ -479,8 +489,19 @@ export function EventDetailPage() {
         })}
       </section>
 
-      {canOperate ? (
+      {canOperate && !editingExpense ? (
         <EventExpenseForm event={event} online={online} onExpenseSaved={handleExpenseSaved} />
+      ) : null}
+
+      {editingExpense ? (
+        <EventExpenseForm
+          key={editingExpense.id}
+          event={event}
+          online={online}
+          expense={editingExpense}
+          onExpenseSaved={handleExpenseSaved}
+          onCancelEdit={() => setEditingExpense(null)}
+        />
       ) : null}
 
       <section className="space-y-3">
@@ -538,14 +559,39 @@ export function EventDetailPage() {
                     {eventPaymentMethodLabels[row.expense.payment_method]} ·{' '}
                     {formatDateTime(row.expense.spent_at)}
                   </p>
+                  {row.expense.updated_by_name ? (
+                    <p className="mt-0.5 text-[11px] text-amber-200/80">
+                      Editado por {row.expense.updated_by_name} ·{' '}
+                      {formatDateTime(row.expense.updated_at)}
+                    </p>
+                  ) : null}
                 </div>
                 <div className="text-right">
                   <p className="font-semibold">{formatCurrency(row.expense.amount)}</p>
+                  {canEdit ? (
+                    row.expense.inventory_load_id ? (
+                      <Link
+                        to={`/eventos/${event.id}/inventario`}
+                        className="mt-1 inline-flex text-[11px] text-brand-300 underline"
+                      >
+                        Editar carga
+                      </Link>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setEditingExpense(row.expense)}
+                        disabled={!online}
+                        className="mt-1 text-[11px] text-neutral-300 underline disabled:opacity-40"
+                      >
+                        Editar
+                      </button>
+                    )
+                  ) : null}
                   {isAdmin ? (
                     <button
                       type="button"
                       onClick={() => handleDeleteSavedExpense(row.expense)}
-                      className="mt-1 text-[11px] text-red-300 underline"
+                      className="mt-1 ml-2 text-[11px] text-red-300 underline"
                     >
                       Eliminar
                     </button>
@@ -555,6 +601,42 @@ export function EventDetailPage() {
             </article>
           )
         })}
+      </section>
+
+      <section className="space-y-3">
+        <div className="flex items-end justify-between gap-3">
+          <h2 className="font-semibold">Historial de cambios</h2>
+          <p className="text-xs text-neutral-500">{financeEditsQuery.data?.length ?? 0}</p>
+        </div>
+        {!online ? (
+          <p className="text-sm text-neutral-500">
+            Conéctate a internet para consultar el historial de cambios.
+          </p>
+        ) : null}
+        {financeEditsQuery.isError ? (
+          <p className="text-sm text-red-300">{financeEditsQuery.error.message}</p>
+        ) : null}
+        {online && financeEditsQuery.data?.length === 0 ? (
+          <p className="text-sm text-neutral-500">Todavía no hay cambios registrados.</p>
+        ) : null}
+        {(financeEditsQuery.data ?? []).map((edit) => (
+          <article
+            key={edit.id}
+            className="rounded-2xl border border-neutral-800 bg-neutral-900 p-4"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="font-medium">{edit.summary}</p>
+                <p className="mt-0.5 text-[11px] text-neutral-500">
+                  {edit.edited_by_name ?? 'Usuario eliminado'} · {formatDateTime(edit.edited_at)}
+                </p>
+              </div>
+              <span className="rounded-full bg-neutral-800 px-2 py-1 text-[10px] text-neutral-400">
+                {edit.entity_type === 'inventory_load' ? 'Carga' : 'Gasto'}
+              </span>
+            </div>
+          </article>
+        ))}
       </section>
     </div>
   )

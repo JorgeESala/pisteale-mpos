@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select extensions.plan(205);
+select extensions.plan(224);
 
 delete from auth.users
 where id in (
@@ -3111,6 +3111,242 @@ select extensions.is(
   'event load uses per-line content'
 );
 
+select public.upsert_inventory_group(
+  '99999999-9999-4999-8999-999999999991'::uuid,
+  'Test Edicion',
+  (select id from public.inventory_categories where name = 'Destilados'),
+  'ml',
+  false,
+  true
+);
+
+select public.upsert_inventory_item(
+  null,
+  (select id from public.inventory_item_groups where name = 'Test Edicion'),
+  'Test Edicion Vodka',
+  null,
+  'botella',
+  'botella',
+  1000,
+  0.5,
+  0,
+  true,
+  true
+);
+
+select public.upsert_inventory_item(
+  null,
+  (select id from public.inventory_item_groups where name = 'Test Edicion'),
+  'Test Edicion Negativo',
+  null,
+  'botella',
+  'botella',
+  1000,
+  0.5,
+  0,
+  true,
+  true
+);
+
+select public.create_event_inventory_load(
+  '16161616-1616-4616-8616-161616161616'::uuid,
+  (select id from public.events where name = 'Test Evento Nocturno'),
+  jsonb_build_array(
+    jsonb_build_object(
+      'item_id', (select id from public.inventory_items where name = 'Test Edicion Vodka'),
+      'qty_purchase', 1,
+      'purchase_factor', 1000,
+      'total_cost', 770
+    )
+  ),
+  'supplies',
+  'cash',
+  '',
+  'Carga editable'
+);
+
+select public.update_event_inventory_load(
+  (select id from public.event_inventory_loads where client_id = '16161616-1616-4616-8616-161616161616'::uuid),
+  (select id from public.events where name = 'Test Evento Nocturno'),
+  jsonb_build_array(
+    jsonb_build_object(
+      'item_id', (select id from public.inventory_items where name = 'Test Edicion Vodka'),
+      'qty_purchase', 4,
+      'purchase_factor', 1000,
+      'total_cost', 770
+    )
+  ),
+  'supplies',
+  'cash',
+  '',
+  'Corrección de cantidad',
+  '2026-11-14T20:00:00-06:00'::timestamptz
+);
+
+select extensions.is(
+  (
+    select total_cost
+    from public.event_inventory_loads
+    where client_id = '16161616-1616-4616-8616-161616161616'::uuid
+  ),
+  770::numeric,
+  'edit load keeps its total cost'
+);
+
+select extensions.is(
+  (
+    select qty_base
+    from public.event_inventory_movements
+    where load_id = (
+      select id from public.event_inventory_loads
+      where client_id = '16161616-1616-4616-8616-161616161616'::uuid
+    )
+      and movement_type = 'purchase'
+  ),
+  4000::numeric,
+  'edit load stores the corrected base quantity'
+);
+
+select extensions.is(
+  (
+    select unit_cost
+    from public.event_inventory_movements
+    where load_id = (
+      select id from public.event_inventory_loads
+      where client_id = '16161616-1616-4616-8616-161616161616'::uuid
+    )
+      and movement_type = 'purchase'
+  ),
+  0.1925::numeric,
+  'edit load recalculates the unit cost'
+);
+
+select extensions.is(
+  (
+    select amount
+    from public.event_expenses
+    where id = (
+      select event_expense_id
+      from public.event_inventory_loads
+      where client_id = '16161616-1616-4616-8616-161616161616'::uuid
+    )
+  ),
+  770::numeric,
+  'edit load keeps the linked expense in sync'
+);
+
+select extensions.is(
+  (
+    select current_qty_base
+    from public.v_event_inventory_stock
+    where event_id = (select id from public.events where name = 'Test Evento Nocturno')
+      and item_name = 'Test Edicion Vodka'
+  ),
+  4000::numeric,
+  'edit load corrects event stock'
+);
+
+select extensions.is(
+  (
+    select stock_value
+    from public.v_event_inventory_stock
+    where event_id = (select id from public.events where name = 'Test Evento Nocturno')
+      and item_name = 'Test Edicion Vodka'
+  ),
+  770::numeric,
+  'edit load corrects event stock value'
+);
+
+select extensions.is(
+  (
+    select count(*)
+    from public.event_finance_edits
+    where entity_type = 'inventory_load'
+      and entity_id = (
+        select id from public.event_inventory_loads
+        where client_id = '16161616-1616-4616-8616-161616161616'::uuid
+      )
+  ),
+  1::bigint,
+  'edit load records its history'
+);
+
+select extensions.is(
+  (
+    select edited_by
+    from public.event_finance_edits
+    where entity_type = 'inventory_load'
+      and entity_id = (
+        select id from public.event_inventory_loads
+        where client_id = '16161616-1616-4616-8616-161616161616'::uuid
+      )
+    limit 1
+  ),
+  '11111111-1111-1111-1111-111111111111'::uuid,
+  'edit load records who edited it'
+);
+
+select public.create_event_inventory_load(
+  '18181818-1818-4818-8818-181818181818'::uuid,
+  (select id from public.events where name = 'Test Evento Nocturno'),
+  jsonb_build_array(
+    jsonb_build_object(
+      'item_id', (select id from public.inventory_items where name = 'Test Edicion Negativo'),
+      'qty_purchase', 1,
+      'purchase_factor', 1000,
+      'total_cost', 100
+    )
+  ),
+  'supplies',
+  'cash',
+  '',
+  'Carga para prueba negativa'
+);
+
+select public.adjust_event_inventory_item(
+  (select id from public.events where name = 'Test Evento Nocturno'),
+  (select id from public.inventory_items where name = 'Test Edicion Negativo'),
+  0,
+  'Conteo en cero'
+);
+
+select extensions.throws_ok(
+  $sql$
+    select public.update_event_inventory_load(
+      (select id from public.event_inventory_loads where client_id = '18181818-1818-4818-8818-181818181818'::uuid),
+      (select id from public.events where name = 'Test Evento Nocturno'),
+      jsonb_build_array(
+        jsonb_build_object(
+          'item_id', (select id from public.inventory_items where name = 'Test Edicion Negativo'),
+          'qty_purchase', 0.5,
+          'purchase_factor', 1000,
+          'total_cost', 100
+        )
+      ),
+      'supplies',
+      'cash',
+      '',
+      'No debe permitirse',
+      null
+    )
+  $sql$,
+  '22023',
+  'La edición dejaría stock negativo de Test Edicion Negativo',
+  'edit load cannot leave negative stock'
+);
+
+select public.create_event_expense(
+  '17171717-1717-4717-8717-171717171717'::uuid,
+  (select id from public.events where name = 'Test Evento Nocturno'),
+  'other',
+  'Test Gasto Editable',
+  100,
+  'cash',
+  '',
+  '2026-11-14T20:00:00-06:00'::timestamptz,
+  ''
+);
+
 select public.admin_set_profile(
   '44444444-4444-4444-4444-444444444444'::uuid,
   'consulta'::public.user_role,
@@ -3137,6 +3373,163 @@ select set_config(
 select extensions.ok(
   (select count(*) from public.v_events) >= 1,
   'consulta can read events'
+);
+
+select public.update_event_expense(
+  (select id from public.event_expenses where client_id = '17171717-1717-4717-8717-171717171717'::uuid),
+  (select id from public.events where name = 'Test Evento Nocturno'),
+  'other',
+  'Test Gasto Editado',
+  200,
+  'cash',
+  '',
+  '2026-11-14T21:00:00-06:00'::timestamptz,
+  'Editado por consulta'
+);
+
+select extensions.is(
+  (
+    select amount
+    from public.event_expenses
+    where client_id = '17171717-1717-4717-8717-171717171717'::uuid
+  ),
+  200::numeric,
+  'consulta can edit a manual expense amount'
+);
+
+select extensions.is(
+  (
+    select description
+    from public.event_expenses
+    where client_id = '17171717-1717-4717-8717-171717171717'::uuid
+  ),
+  'Test Gasto Editado',
+  'consulta can edit a manual expense description'
+);
+
+select extensions.is(
+  (
+    select updated_by
+    from public.event_expenses
+    where client_id = '17171717-1717-4717-8717-171717171717'::uuid
+  ),
+  '44444444-4444-4444-4444-444444444444'::uuid,
+  'manual expense edit records its editor'
+);
+
+select extensions.is(
+  (
+    select count(*)
+    from public.event_finance_edits
+    where entity_type = 'expense'
+      and entity_id = (
+        select id from public.event_expenses
+        where client_id = '17171717-1717-4717-8717-171717171717'::uuid
+      )
+      and edited_by = '44444444-4444-4444-4444-444444444444'::uuid
+  ),
+  1::bigint,
+  'manual expense edit records its history'
+);
+
+select public.update_event_inventory_load(
+  (select id from public.event_inventory_loads where client_id = '16161616-1616-4616-8616-161616161616'::uuid),
+  (select id from public.events where name = 'Test Evento Nocturno'),
+  jsonb_build_array(
+    jsonb_build_object(
+      'item_id', (select id from public.inventory_items where name = 'Test Edicion Vodka'),
+      'qty_purchase', 5,
+      'purchase_factor', 1000,
+      'total_cost', 800
+    )
+  ),
+  'supplies',
+  'cash',
+  '',
+  'Corrección por consulta',
+  '2026-11-14T22:00:00-06:00'::timestamptz
+);
+
+select extensions.is(
+  (
+    select total_cost
+    from public.event_inventory_loads
+    where client_id = '16161616-1616-4616-8616-161616161616'::uuid
+  ),
+  800::numeric,
+  'consulta can edit an inventory load'
+);
+
+select extensions.is(
+  (
+    select updated_by
+    from public.event_inventory_loads
+    where client_id = '16161616-1616-4616-8616-161616161616'::uuid
+  ),
+  '44444444-4444-4444-4444-444444444444'::uuid,
+  'inventory load records its last editor'
+);
+
+select extensions.is(
+  (
+    select count(*)
+    from public.event_finance_edits
+    where entity_type = 'inventory_load'
+      and entity_id = (
+        select id from public.event_inventory_loads
+        where client_id = '16161616-1616-4616-8616-161616161616'::uuid
+      )
+  ),
+  2::bigint,
+  'inventory load edits keep full history'
+);
+
+select extensions.is(
+  (
+    select count(*)
+    from public.event_finance_edits
+    where entity_type = 'inventory_load'
+      and entity_id = (
+        select id from public.event_inventory_loads
+        where client_id = '16161616-1616-4616-8616-161616161616'::uuid
+      )
+      and edited_by = '44444444-4444-4444-4444-444444444444'::uuid
+  ),
+  1::bigint,
+  'inventory load edit records the consulta user'
+);
+
+select extensions.is(
+  (
+    select inventory_load_id
+    from public.v_event_expenses
+    where id = (
+      select event_expense_id
+      from public.event_inventory_loads
+      where client_id = '16161616-1616-4616-8616-161616161616'::uuid
+    )
+  ),
+  (select id from public.event_inventory_loads where client_id = '16161616-1616-4616-8616-161616161616'::uuid),
+  'expense view links the inventory load'
+);
+
+select extensions.throws_ok(
+  $sql$
+    select public.update_event_expense(
+      (select event_expense_id from public.event_inventory_loads where client_id = '16161616-1616-4616-8616-161616161616'::uuid),
+      (select id from public.events where name = 'Test Evento Nocturno'),
+      'supplies',
+      'Intento inválido',
+      800,
+      'cash',
+      '',
+      now(),
+      ''
+    )
+  $sql$,
+  '22023',
+  'Este gasto está ligado a una carga de inventario del evento',
+  'inventory-linked expenses cannot be edited as manual expenses'
 );
 
 select extensions.throws_ok(

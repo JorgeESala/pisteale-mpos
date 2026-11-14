@@ -2,12 +2,17 @@ import { useState } from 'react'
 import { useAuth } from '@/features/auth/auth-context'
 import { formDraftKey } from '@/lib/form-drafts'
 import { useDraftState } from '@/lib/use-draft-state'
-import type { EventExpenseCategory, EventView, PaymentMethod } from '@/types/database'
+import type {
+  EventExpenseCategory,
+  EventExpenseView,
+  EventView,
+  PaymentMethod,
+} from '@/types/database'
 import { eventPaymentMethodLabels, expenseCategoryLabels } from './event-labels'
 import { isConnectivityError } from './connectivity'
 import { eventExpenseFormSchema, localDateTimeToIso, localDateTimeValue } from './event-schemas'
 import { createClientId, enqueueEventExpense } from './offline-queue'
-import { createEventExpense } from './queries'
+import { createEventExpense, updateEventExpense } from './queries'
 
 type EventExpenseDraft = {
   category: EventExpenseCategory
@@ -31,17 +36,38 @@ function emptyExpenseDraft(): EventExpenseDraft {
   }
 }
 
+function draftFromExpense(expense: EventExpenseView): EventExpenseDraft {
+  return {
+    category: expense.category,
+    description: expense.description,
+    amount: String(expense.amount),
+    paymentMethod: expense.payment_method,
+    reference: expense.reference,
+    spentAt: localDateTimeValue(new Date(expense.spent_at)),
+    notes: expense.notes,
+  }
+}
+
 type EventExpenseFormProps = {
   event: EventView
   online: boolean
   onExpenseSaved: (pending: boolean) => void
+  expense?: EventExpenseView | null
+  onCancelEdit?: () => void
 }
 
-export function EventExpenseForm({ event, online, onExpenseSaved }: EventExpenseFormProps) {
+export function EventExpenseForm({
+  event,
+  online,
+  onExpenseSaved,
+  expense,
+  onCancelEdit,
+}: EventExpenseFormProps) {
   const { profile } = useAuth()
   const userId = profile?.id ?? null
-  const storageKey = userId ? formDraftKey('event-expense', userId, event.id) : null
-  const [initialDraft] = useState(emptyExpenseDraft)
+  const isEditing = Boolean(expense)
+  const storageKey = !isEditing && userId ? formDraftKey('event-expense', userId, event.id) : null
+  const [initialDraft] = useState(() => (expense ? draftFromExpense(expense) : emptyExpenseDraft()))
   const {
     value: draft,
     setValue: setDraft,
@@ -99,6 +125,27 @@ export function EventExpenseForm({ event, online, onExpenseSaved }: EventExpense
         notes: draft.notes,
       }
 
+      if (isEditing && expense) {
+        if (!online) {
+          throw new Error('Conéctate a internet para editar el gasto.')
+        }
+
+        await updateEventExpense({
+          expenseId: expense.id,
+          eventId: event.id,
+          category: draft.category,
+          description: draft.description,
+          amount,
+          paymentMethod: draft.paymentMethod,
+          reference: draft.reference,
+          spentAt: localDateTimeToIso(draft.spentAt),
+          notes: draft.notes,
+        })
+        setMessage('Gasto actualizado.')
+        onExpenseSaved(false)
+        return
+      }
+
       if (online) {
         try {
           await createEventExpense(input)
@@ -129,9 +176,11 @@ export function EventExpenseForm({ event, online, onExpenseSaved }: EventExpense
   return (
     <section className="space-y-3 rounded-2xl border border-neutral-800 bg-neutral-900 p-4">
       <div>
-        <h2 className="font-semibold">Registrar gasto</h2>
+        <h2 className="font-semibold">{isEditing ? 'Editar gasto' : 'Registrar gasto'}</h2>
         <p className="mt-1 text-sm text-neutral-400">
-          Insumos, hielo, transporte, personal o cualquier costo del evento.
+          {isEditing
+            ? 'Corrige el gasto manual. El cambio quedará registrado en el historial del evento.'
+            : 'Insumos, hielo, transporte, personal o cualquier costo del evento.'}
         </p>
       </div>
 
@@ -272,14 +321,25 @@ export function EventExpenseForm({ event, online, onExpenseSaved }: EventExpense
         </p>
       ) : null}
 
-      <button
-        type="button"
-        onClick={() => void submitExpense()}
-        disabled={submitting}
-        className="w-full rounded-xl bg-brand-400 px-4 py-3 text-sm font-semibold text-neutral-950 transition hover:bg-brand-300 disabled:opacity-60"
-      >
-        {submitting ? 'Registrando…' : 'Registrar gasto'}
-      </button>
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={() => void submitExpense()}
+          disabled={submitting || (isEditing && !online)}
+          className="flex-1 rounded-xl bg-brand-400 px-4 py-3 text-sm font-semibold text-neutral-950 transition hover:bg-brand-300 disabled:opacity-60"
+        >
+          {submitting ? 'Guardando…' : isEditing ? 'Guardar cambios' : 'Registrar gasto'}
+        </button>
+        {isEditing && onCancelEdit ? (
+          <button
+            type="button"
+            onClick={onCancelEdit}
+            className="rounded-xl border border-neutral-700 px-4 py-3 text-sm text-neutral-300"
+          >
+            Cerrar
+          </button>
+        ) : null}
+      </div>
     </section>
   )
 }

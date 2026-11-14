@@ -107,9 +107,12 @@ const savedExpense: EventExpenseView = {
   created_by: null,
   created_at: '2026-11-14T10:00:00.000Z',
   updated_at: '2026-11-14T10:00:00.000Z',
+  updated_by: null,
   event_folio: 'EVT-2026-00001',
   event_name: 'Parque',
   created_by_name: null,
+  updated_by_name: null,
+  inventory_load_id: null,
 }
 
 describe('event report', () => {

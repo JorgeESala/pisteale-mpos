@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useFieldArray, useForm, useWatch } from 'react-hook-form'
 import { Link, useParams } from 'react-router-dom'
 import { useAuth } from '@/features/auth/auth-context'
@@ -9,6 +9,7 @@ import { formatDateTime, formatQty } from '@/features/inventory/inventory-utils'
 import { formatCurrency, formatUnitCost } from '@/lib/format'
 import { useOnlineStatus } from '@/lib/use-online-status'
 import type {
+  EventInventoryLoadView,
   EventInventoryMovementType,
   EventInventoryStock,
   InventoryItemView,
@@ -16,18 +17,19 @@ import type {
 import { useEventSync } from './event-sync-context'
 import { eventPaymentMethodLabels, eventStatusLabels, expenseCategoryLabels } from './event-labels'
 import {
-  eventInventoryAdjustSchema,
-  eventInventoryLoadFormSchema,
+  eventInventoryLoadEditSchema,
   eventInventoryTransferSchema,
-  type EventInventoryLoadForm,
+  localDateTimeToIso,
+  localDateTimeValue,
+  type EventInventoryLoadEditForm,
 } from './event-schemas'
 import { createClientId } from './offline-queue'
 import {
-  adjustEventInventoryItem,
   createEventInventoryLoad,
   fetchEventBundle,
   fetchEventInventory,
   transferEventInventoryToGeneral,
+  updateEventInventoryLoad,
 } from './queries'
 
 const movementLabels: Record<EventInventoryMovementType, string> = {
@@ -38,12 +40,15 @@ const movementLabels: Record<EventInventoryMovementType, string> = {
   waste: 'Merma',
 }
 
-const defaultLoadValues: EventInventoryLoadForm = {
-  items: [{ itemId: '', qtyPurchase: 1, purchaseFactor: 1, totalCost: 0 }],
-  category: 'supplies',
-  paymentMethod: 'cash',
-  reference: '',
-  notes: '',
+function emptyLoadValues(): EventInventoryLoadEditForm {
+  return {
+    items: [{ itemId: '', qtyPurchase: 1, purchaseFactor: 1, totalCost: 0 }],
+    category: 'supplies',
+    paymentMethod: 'cash',
+    reference: '',
+    notes: '',
+    spentAt: localDateTimeValue(),
+  }
 }
 
 function itemPurchaseLabel(item: InventoryItemView | undefined) {
@@ -60,6 +65,7 @@ export function EventInventoryPage() {
   const userId = profile?.id ?? null
   const online = useOnlineStatus()
   const canOperate = profile?.role === 'admin' || profile?.role === 'operador'
+  const canEdit = Boolean(profile)
   const { pendingSales } = useEventSync()
 
   const eventQuery = useQuery({
@@ -71,7 +77,7 @@ export function EventInventoryPage() {
   const itemsQuery = useQuery({
     queryKey: ['inventory_items'],
     queryFn: fetchInventoryItems,
-    enabled: canOperate,
+    enabled: Boolean(userId),
   })
 
   const inventoryQuery = useQuery({
@@ -84,9 +90,11 @@ export function EventInventoryPage() {
   const [loadMessage, setLoadMessage] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [actionItemId, setActionItemId] = useState<string | null>(null)
-  const [actionType, setActionType] = useState<'adjust' | 'transfer' | null>(null)
   const [actionQty, setActionQty] = useState('')
   const [actionNotes, setActionNotes] = useState('')
+  const [editingLoad, setEditingLoad] = useState<EventInventoryLoadView | null>(null)
+  const [itemLoadsItemId, setItemLoadsItemId] = useState<string | null>(null)
+  const formRef = useRef<HTMLFormElement>(null)
 
   const {
     control,
@@ -94,10 +102,10 @@ export function EventInventoryPage() {
     setValue,
     handleSubmit,
     reset,
-    formState: { errors, isSubmitting },
-  } = useForm<EventInventoryLoadForm>({
-    resolver: zodResolver(eventInventoryLoadFormSchema),
-    defaultValues: defaultLoadValues,
+    formState: { errors },
+  } = useForm<EventInventoryLoadEditForm>({
+    resolver: zodResolver(eventInventoryLoadEditSchema),
+    defaultValues: emptyLoadValues(),
   })
 
   const { fields, append, remove } = useFieldArray({ control, name: 'items' })
@@ -107,14 +115,15 @@ export function EventInventoryPage() {
   const stock = inventoryQuery.data?.stock ?? []
   const loads = inventoryQuery.data?.loads ?? []
   const movements = inventoryQuery.data?.movements ?? []
+  const loadLines = inventoryQuery.data?.loadLines ?? []
   const eventPendingSales = pendingSales.filter((sale) => sale.eventId === eventId)
   const hasPendingSales = eventPendingSales.length > 0
   const canTransfer = canOperate && online && event?.status === 'closed' && !hasPendingSales
 
-  const stockableItems = (itemsQuery.data ?? [])
-    .filter((item) => item.active)
-    .sort((a, b) => a.name.localeCompare(b.name))
-  const itemById = new Map(stockableItems.map((item) => [item.id, item]))
+  const allItems = (itemsQuery.data ?? []).sort((a, b) => a.name.localeCompare(b.name))
+  const stockableItems = allItems.filter((item) => item.active)
+  const selectableItems = editingLoad ? allItems : stockableItems
+  const itemById = new Map(allItems.map((item) => [item.id, item]))
   const loadTotal = watchedItems.reduce((sum, item) => sum + (Number(item.totalCost) || 0), 0)
 
   function invalidateInventory() {
@@ -123,10 +132,11 @@ export function EventInventoryPage() {
     void queryClient.invalidateQueries({ queryKey: ['events'] })
     void queryClient.invalidateQueries({ queryKey: ['inventory_stock'] })
     void queryClient.invalidateQueries({ queryKey: ['inventory_movements'] })
+    void queryClient.invalidateQueries({ queryKey: ['event_finance_edits', eventId] })
   }
 
   const loadMutation = useMutation({
-    mutationFn: (values: EventInventoryLoadForm) =>
+    mutationFn: (values: EventInventoryLoadEditForm) =>
       createEventInventoryLoad({
         clientId: createClientId(),
         eventId,
@@ -144,7 +154,7 @@ export function EventInventoryPage() {
     onSuccess: () => {
       setLoadError(null)
       setLoadMessage('Carga registrada. El gasto se agregó automáticamente al evento.')
-      reset(defaultLoadValues)
+      reset(emptyLoadValues())
       invalidateInventory()
     },
     onError: (error) => {
@@ -153,15 +163,38 @@ export function EventInventoryPage() {
     },
   })
 
-  const adjustMutation = useMutation({
-    mutationFn: (input: { itemId: string; countedQtyBase: number; notes: string }) =>
-      adjustEventInventoryItem({ eventId, ...input }),
+  const editMutation = useMutation({
+    mutationFn: (values: EventInventoryLoadEditForm) => {
+      if (!editingLoad) throw new Error('No hay una carga en edición.')
+
+      return updateEventInventoryLoad({
+        loadId: editingLoad.id,
+        eventId,
+        items: values.items.map((item) => ({
+          itemId: item.itemId,
+          qtyPurchase: item.qtyPurchase,
+          purchaseFactor: item.purchaseFactor,
+          totalCost: item.totalCost,
+        })),
+        category: values.category,
+        paymentMethod: values.paymentMethod,
+        reference: values.reference,
+        notes: values.notes,
+        spentAt: localDateTimeToIso(values.spentAt),
+      })
+    },
     onSuccess: () => {
-      setActionError(null)
-      closeAction()
+      setLoadError(null)
+      setLoadMessage('Carga corregida. El stock y el gasto se actualizaron.')
+      setEditingLoad(null)
+      setItemLoadsItemId(null)
+      reset(emptyLoadValues())
       invalidateInventory()
     },
-    onError: (error) => setActionError(error.message),
+    onError: (error) => {
+      setLoadMessage(null)
+      setLoadError(error.message)
+    },
   })
 
   const transferMutation = useMutation({
@@ -175,70 +208,113 @@ export function EventInventoryPage() {
     onError: (error) => setActionError(error.message),
   })
 
+  const isSaving = editingLoad ? editMutation.isPending : loadMutation.isPending
+
   function closeAction() {
     setActionItemId(null)
-    setActionType(null)
     setActionQty('')
     setActionNotes('')
   }
 
-  function startAction(item: EventInventoryStock, type: 'adjust' | 'transfer') {
+  function startTransfer(item: EventInventoryStock) {
     setActionError(null)
     setActionItemId(item.item_id)
-    setActionType(type)
-    setActionQty(type === 'adjust' ? String(item.current_qty_base) : '')
+    setActionQty('')
     setActionNotes('')
   }
 
-  function submitAction(item: EventInventoryStock) {
+  function submitTransfer(item: EventInventoryStock) {
     setActionError(null)
 
-    if (actionType === 'adjust') {
-      const validation = eventInventoryAdjustSchema.safeParse({
-        countedQtyBase: Number(actionQty),
-        notes: actionNotes,
-      })
-
-      if (!validation.success) {
-        setActionError(validation.error.issues[0]?.message ?? 'Revisa el conteo.')
-        return
-      }
-
-      adjustMutation.mutate({
-        itemId: item.item_id,
-        countedQtyBase: validation.data.countedQtyBase,
-        notes: validation.data.notes,
-      })
+    if (!canTransfer || item.current_qty_base <= 0) {
+      setActionError('No puedes transferir sobrantes en este momento.')
       return
     }
 
-    if (actionType === 'transfer') {
-      if (!canTransfer || item.current_qty_base <= 0) {
-        setActionError('No puedes transferir sobrantes en este momento.')
-        return
-      }
+    const validation = eventInventoryTransferSchema.safeParse({
+      qtyBase: Number(actionQty),
+      notes: actionNotes,
+    })
 
-      const validation = eventInventoryTransferSchema.safeParse({
-        qtyBase: Number(actionQty),
-        notes: actionNotes,
-      })
-
-      if (!validation.success) {
-        setActionError(validation.error.issues[0]?.message ?? 'Revisa la cantidad.')
-        return
-      }
-
-      if (validation.data.qtyBase > item.current_qty_base) {
-        setActionError('No puedes transferir más de lo disponible.')
-        return
-      }
-
-      transferMutation.mutate({
-        itemId: item.item_id,
-        qtyBase: validation.data.qtyBase,
-        notes: validation.data.notes,
-      })
+    if (!validation.success) {
+      setActionError(validation.error.issues[0]?.message ?? 'Revisa la cantidad.')
+      return
     }
+
+    if (validation.data.qtyBase > item.current_qty_base) {
+      setActionError('No puedes transferir más de lo disponible.')
+      return
+    }
+
+    transferMutation.mutate({
+      itemId: item.item_id,
+      qtyBase: validation.data.qtyBase,
+      notes: validation.data.notes,
+    })
+  }
+
+  function loadsForItem(itemId: string) {
+    return loads.filter((load) =>
+      loadLines.some((movement) => movement.load_id === load.id && movement.item_id === itemId),
+    )
+  }
+
+  function startEditingLoad(load: EventInventoryLoadView) {
+    const loadMovements = loadLines.filter((movement) => movement.load_id === load.id)
+
+    if (loadMovements.length === 0) {
+      setLoadMessage(null)
+      setLoadError('Esta carga no tiene líneas de compra para editar.')
+      return
+    }
+
+    const items = loadMovements.map((movement) => {
+      const item = itemById.get(movement.item_id)
+      let purchaseFactor = item?.purchase_factor ?? 1
+      let qtyPurchase = Number((movement.qty_base / purchaseFactor).toFixed(4))
+
+      if (qtyPurchase <= 0) {
+        purchaseFactor = 1
+        qtyPurchase = movement.qty_base
+      }
+
+      return {
+        itemId: movement.item_id,
+        qtyPurchase,
+        purchaseFactor,
+        totalCost: movement.total_cost,
+      }
+    })
+
+    setEditingLoad(load)
+    setLoadError(null)
+    setLoadMessage(null)
+    setItemLoadsItemId(null)
+    reset({
+      items,
+      category: load.category,
+      paymentMethod: load.payment_method,
+      reference: load.reference,
+      notes: load.notes,
+      spentAt: load.spent_at ? localDateTimeValue(new Date(load.spent_at)) : localDateTimeValue(),
+    })
+    formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
+  function cancelEdit() {
+    setEditingLoad(null)
+    setLoadError(null)
+    setLoadMessage(null)
+    reset(emptyLoadValues())
+  }
+
+  function submitLoad(values: EventInventoryLoadEditForm) {
+    if (editingLoad) {
+      editMutation.mutate(values)
+      return
+    }
+
+    loadMutation.mutate(values)
   }
 
   if (!eventId || !userId) {
@@ -300,7 +376,7 @@ export function EventInventoryPage() {
 
       {!online ? (
         <p className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
-          Conéctate a internet para cargar, ajustar o transferir inventario del evento.
+          Conéctate a internet para cargar, editar o transferir inventario del evento.
         </p>
       ) : null}
 
@@ -316,16 +392,33 @@ export function EventInventoryPage() {
         </p>
       ) : null}
 
-      {canOperate ? (
+      {loadError ? (
+        <p className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+          {loadError}
+        </p>
+      ) : null}
+
+      {loadMessage ? (
+        <p className="rounded-xl border border-green-500/30 bg-green-500/10 px-3 py-2 text-sm text-green-300">
+          {loadMessage}
+        </p>
+      ) : null}
+
+      {canOperate || editingLoad ? (
         <form
+          ref={formRef}
           className="space-y-4 rounded-2xl border border-neutral-800 bg-neutral-900 p-4"
-          onSubmit={handleSubmit((values) => loadMutation.mutate(values))}
+          onSubmit={handleSubmit(submitLoad)}
           noValidate
         >
           <div>
-            <h2 className="font-semibold">Cargar insumos al evento</h2>
+            <h2 className="font-semibold">
+              {editingLoad ? 'Editar carga' : 'Cargar insumos al evento'}
+            </h2>
             <p className="mt-1 text-sm text-neutral-400">
-              Registra lo que compras para el evento. Se creará un gasto automático por el total.
+              {editingLoad
+                ? 'Corrige cantidades, contenido, costo o gasto. El stock se recalculará.'
+                : 'Registra lo que compras para el evento. Se creará un gasto automático por el total.'}
             </p>
           </div>
 
@@ -365,7 +458,7 @@ export function EventInventoryPage() {
                       className="w-full rounded-xl border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 outline-none focus:border-brand-400"
                     >
                       <option value="">Selecciona un insumo</option>
-                      {stockableItems.map((option) => (
+                      {selectableItems.map((option) => (
                         <option key={option.id} value={option.id}>
                           {option.name} · {option.group_name}
                         </option>
@@ -543,30 +636,52 @@ export function EventInventoryPage() {
             />
           </div>
 
+          {editingLoad ? (
+            <div>
+              <label htmlFor="loadSpentAt" className="mb-1.5 block text-xs text-neutral-400">
+                Fecha y hora del gasto
+              </label>
+              <input
+                id="loadSpentAt"
+                type="datetime-local"
+                {...register('spentAt')}
+                className="w-full rounded-xl border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100 outline-none focus:border-brand-400"
+              />
+              {errors.spentAt ? (
+                <p className="mt-1 text-xs text-red-300">{errors.spentAt.message}</p>
+              ) : null}
+            </div>
+          ) : null}
+
           <div className="flex items-center justify-between gap-3 text-sm">
             <span className="text-neutral-400">Total de la carga</span>
             <span className="font-semibold">{formatCurrency(loadTotal)}</span>
           </div>
 
-          {loadError ? (
-            <p className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
-              {loadError}
-            </p>
-          ) : null}
-
-          {loadMessage ? (
-            <p className="rounded-xl border border-green-500/30 bg-green-500/10 px-3 py-2 text-sm text-green-300">
-              {loadMessage}
-            </p>
-          ) : null}
-
-          <button
-            type="submit"
-            disabled={isSubmitting || loadMutation.isPending || !online}
-            className="w-full rounded-xl bg-brand-400 px-4 py-3 text-sm font-semibold text-neutral-950 transition hover:bg-brand-300 disabled:opacity-60"
-          >
-            {loadMutation.isPending ? 'Registrando…' : 'Registrar carga'}
-          </button>
+          <div className="flex gap-2">
+            <button
+              type="submit"
+              disabled={isSaving || !online}
+              className="flex-1 rounded-xl bg-brand-400 px-4 py-3 text-sm font-semibold text-neutral-950 transition hover:bg-brand-300 disabled:opacity-60"
+            >
+              {isSaving
+                ? editingLoad
+                  ? 'Guardando…'
+                  : 'Registrando…'
+                : editingLoad
+                  ? 'Guardar corrección'
+                  : 'Registrar carga'}
+            </button>
+            {editingLoad ? (
+              <button
+                type="button"
+                onClick={cancelEdit}
+                className="rounded-xl border border-neutral-700 px-4 py-3 text-sm text-neutral-300"
+              >
+                Cancelar
+              </button>
+            ) : null}
+          </div>
         </form>
       ) : null}
 
@@ -625,31 +740,67 @@ export function EventInventoryPage() {
               <span>Ajustes: {formatQty(item.adjusted_base, item.base_unit)}</span>
             </div>
 
-            {canOperate ? (
+            {canEdit || canOperate ? (
               <div className="mt-3 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => startAction(item, 'adjust')}
-                  className="rounded-lg border border-neutral-700 px-2 py-1 text-xs text-neutral-300"
-                >
-                  Ajustar conteo
-                </button>
-                <button
-                  type="button"
-                  onClick={() => startAction(item, 'transfer')}
-                  disabled={!canTransfer || !item.track_stock || item.current_qty_base <= 0}
-                  className="rounded-lg border border-neutral-700 px-2 py-1 text-xs text-neutral-300 disabled:opacity-40"
-                  title={!item.track_stock ? 'Este insumo no lleva inventario general' : undefined}
-                >
-                  Transferir sobrante
-                </button>
+                {canEdit ? (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setItemLoadsItemId(itemLoadsItemId === item.item_id ? null : item.item_id)
+                    }
+                    className="rounded-lg border border-neutral-700 px-2 py-1 text-xs text-neutral-300"
+                  >
+                    Editar
+                  </button>
+                ) : null}
+                {canOperate ? (
+                  <button
+                    type="button"
+                    onClick={() => startTransfer(item)}
+                    disabled={!canTransfer || !item.track_stock || item.current_qty_base <= 0}
+                    className="rounded-lg border border-neutral-700 px-2 py-1 text-xs text-neutral-300 disabled:opacity-40"
+                    title={
+                      !item.track_stock ? 'Este insumo no lleva inventario general' : undefined
+                    }
+                  >
+                    Transferir sobrante
+                  </button>
+                ) : null}
               </div>
             ) : null}
 
-            {actionItemId === item.item_id && actionType ? (
+            {itemLoadsItemId === item.item_id ? (
+              <div className="mt-3 space-y-2 rounded-xl border border-neutral-800 bg-neutral-950 p-3">
+                <p className="text-xs font-medium text-neutral-300">Cargas de este insumo</p>
+                {loadsForItem(item.item_id).length === 0 ? (
+                  <p className="text-xs text-neutral-500">No hay cargas para este insumo.</p>
+                ) : (
+                  loadsForItem(item.item_id).map((load) => (
+                    <div
+                      key={load.id}
+                      className="flex items-center justify-between gap-3 rounded-lg border border-neutral-800 px-2 py-2 text-xs"
+                    >
+                      <span className="text-neutral-400">
+                        {formatDateTime(load.created_at)} · {formatCurrency(load.total_cost)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => startEditingLoad(load)}
+                        disabled={!online}
+                        className="rounded-lg border border-neutral-700 px-2 py-1 text-neutral-200 disabled:opacity-40"
+                      >
+                        Editar carga
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            ) : null}
+
+            {actionItemId === item.item_id ? (
               <div className="mt-3 space-y-2 rounded-xl border border-neutral-800 bg-neutral-950 p-3">
                 <p className="text-xs font-medium text-neutral-300">
-                  {actionType === 'adjust' ? 'Conteo físico' : 'Transferir al inventario general'}
+                  Transferir al inventario general
                 </p>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
@@ -657,9 +808,7 @@ export function EventInventoryPage() {
                       htmlFor={`action-qty-${item.item_id}`}
                       className="mb-1 block text-[11px] text-neutral-500"
                     >
-                      {actionType === 'adjust'
-                        ? `Cantidad contada (${item.base_unit})`
-                        : `Cantidad a transferir (${item.base_unit})`}
+                      Cantidad a transferir ({item.base_unit})
                     </label>
                     <input
                       id={`action-qty-${item.item_id}`}
@@ -692,8 +841,8 @@ export function EventInventoryPage() {
                 <div className="flex gap-2">
                   <button
                     type="button"
-                    onClick={() => submitAction(item)}
-                    disabled={adjustMutation.isPending || transferMutation.isPending}
+                    onClick={() => submitTransfer(item)}
+                    disabled={transferMutation.isPending}
                     className="rounded-lg bg-brand-400 px-3 py-1.5 text-xs font-semibold text-neutral-950 disabled:opacity-60"
                   >
                     Guardar
@@ -720,16 +869,23 @@ export function EventInventoryPage() {
         {loads.map((load) => (
           <article
             key={load.id}
-            className="rounded-2xl border border-neutral-800 bg-neutral-900 p-4"
+            className={`rounded-2xl border bg-neutral-900 p-4 ${
+              editingLoad?.id === load.id ? 'border-brand-400' : 'border-neutral-800'
+            }`}
           >
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="font-medium">{expenseCategoryLabels[load.category]}</p>
                 <p className="mt-0.5 text-[11px] text-neutral-500">
-                  {formatDateTime(load.created_at)} ·{' '}
+                  {formatDateTime(load.spent_at ?? load.created_at)} ·{' '}
                   {eventPaymentMethodLabels[load.payment_method]}
                   {load.created_by_name ? ` · ${load.created_by_name}` : ''}
                 </p>
+                {load.updated_by_name && load.updated_at ? (
+                  <p className="mt-0.5 text-[11px] text-amber-200/80">
+                    Editado por {load.updated_by_name} · {formatDateTime(load.updated_at)}
+                  </p>
+                ) : null}
               </div>
               <p className="font-semibold">{formatCurrency(load.total_cost)}</p>
             </div>
@@ -737,6 +893,16 @@ export function EventInventoryPage() {
               <p className="mt-2 text-xs text-neutral-500">
                 {[load.reference, load.notes].filter(Boolean).join(' · ')}
               </p>
+            ) : null}
+            {canEdit ? (
+              <button
+                type="button"
+                onClick={() => startEditingLoad(load)}
+                disabled={!online}
+                className="mt-3 rounded-lg border border-neutral-700 px-2 py-1 text-xs text-neutral-300 disabled:opacity-40"
+              >
+                Editar
+              </button>
             ) : null}
           </article>
         ))}
