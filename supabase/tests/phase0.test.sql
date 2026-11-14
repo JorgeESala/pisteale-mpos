@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select extensions.plan(199);
+select extensions.plan(205);
 
 delete from auth.users
 where id in (
@@ -3257,6 +3257,188 @@ select extensions.throws_ok(
 );
 
 reset role;
+
+select set_config(
+  'request.jwt.claim.sub',
+  '33333333-3333-3333-3333-333333333333',
+  true
+);
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"33333333-3333-3333-3333-333333333333","role":"authenticated"}',
+  true
+);
+
+insert into public.inventory_item_groups (name, base_unit, is_tiered, active)
+values
+  ('Test Familia A', 'ml', false, true),
+  ('Test Familia B', 'ml', false, true);
+
+insert into public.inventory_items (
+  name,
+  group_id,
+  kind,
+  purchase_unit,
+  purchase_factor,
+  avg_cost,
+  min_stock_base,
+  track_stock,
+  active
+)
+select
+  'Test Familia Item A',
+  (select id from public.inventory_item_groups where name = 'Test Familia A'),
+  'ingrediente',
+  'botella',
+  750,
+  1,
+  0,
+  true,
+  true
+union all
+select
+  'Test Familia Item B',
+  (select id from public.inventory_item_groups where name = 'Test Familia B'),
+  'ingrediente',
+  'botella',
+  750,
+  2,
+  0,
+  true,
+  true;
+
+insert into public.products (
+  id,
+  name,
+  kind,
+  price,
+  premium_price,
+  is_alcoholic,
+  active
+)
+values (
+  '99999999-9999-4999-8999-999999999990'::uuid,
+  'Test Consolidacion',
+  'preparado',
+  100,
+  150,
+  true,
+  true
+);
+
+insert into public.recipes (product_id, yield_qty, yield_unit)
+values (
+  '99999999-9999-4999-8999-999999999990'::uuid,
+  1,
+  'porcion'
+);
+
+insert into public.recipe_items (
+  recipe_id,
+  inventory_group_id,
+  tier_rule,
+  qty_base,
+  input_qty,
+  input_unit
+)
+select
+  (
+    select id
+    from public.recipes
+    where product_id = '99999999-9999-4999-8999-999999999990'::uuid
+  ),
+  g.id,
+  'estandar',
+  case g.name when 'Test Familia A' then 10 else 20 end,
+  case g.name when 'Test Familia A' then 10 else 20 end,
+  'ml'
+from public.inventory_item_groups g
+where g.name in ('Test Familia A', 'Test Familia B');
+
+select private.consolidate_inventory_group_family(
+  'Test Familia',
+  null,
+  'ml',
+  false
+);
+
+select extensions.is(
+  (
+    select count(*)
+    from public.inventory_items
+    where group_id = (
+      select id from public.inventory_item_groups where name = 'Test Familia'
+    )
+  ),
+  2::bigint,
+  'group family moves all items to the generic group'
+);
+
+select extensions.is(
+  (
+    select count(*)
+    from public.inventory_item_groups
+    where name in ('Test Familia A', 'Test Familia B')
+      and active
+  ),
+  0::bigint,
+  'group family deactivates source groups'
+);
+
+select extensions.is(
+  (
+    select count(*)
+    from public.recipe_items
+    where inventory_group_id = (
+      select id from public.inventory_item_groups where name = 'Test Familia'
+    )
+  ),
+  1::bigint,
+  'group family merges duplicate recipe lines'
+);
+
+select extensions.is(
+  (
+    select qty_base
+    from public.recipe_items
+    where inventory_group_id = (
+      select id from public.inventory_item_groups where name = 'Test Familia'
+    )
+  ),
+  30::numeric,
+  'group family sums recipe quantities in base units'
+);
+
+select extensions.is(
+  (
+    select tier_rule
+    from public.recipe_items
+    where inventory_group_id = (
+      select id from public.inventory_item_groups where name = 'Test Familia'
+    )
+  ),
+  'any'::text,
+  'group family uses any tier for merged recipes'
+);
+
+select private.consolidate_inventory_group_family(
+  'Test Familia',
+  null,
+  'ml',
+  false
+);
+
+select extensions.is(
+  (
+    select count(*)
+    from public.recipe_items
+    where inventory_group_id = (
+      select id from public.inventory_item_groups where name = 'Test Familia'
+    )
+  ),
+  1::bigint,
+  'group family is idempotent'
+);
 
 select *
 from extensions.finish();
