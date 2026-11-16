@@ -108,13 +108,13 @@ export function EventsPage() {
                   </p>
                 </div>
                 <div>
-                  <p className="text-[11px] text-neutral-500">Utilidad</p>
+                  <p className="text-[11px] text-neutral-500">Ganancia</p>
                   <p
                     className={`mt-0.5 font-semibold ${
-                      event.profit >= 0 ? 'text-green-300' : 'text-red-300'
+                      event.result_total >= 0 ? 'text-green-300' : 'text-red-300'
                     }`}
                   >
-                    {formatCurrency(event.profit)}
+                    {formatCurrency(event.result_total)}
                   </p>
                 </div>
               </div>
@@ -123,8 +123,20 @@ export function EventsPage() {
                 {event.sales_count} {event.sales_count === 1 ? 'venta' : 'ventas'} ·{' '}
                 {event.drinks_count} {event.drinks_count === 1 ? 'bebida' : 'bebidas'} ·{' '}
                 {event.expenses_count} {event.expenses_count === 1 ? 'gasto' : 'gastos'}
-                {event.margin_percent !== null ? ` · Margen ${event.margin_percent}%` : ''}
+                {event.result_margin_percent !== null
+                  ? ` · Margen ${event.result_margin_percent}%`
+                  : ''}
               </p>
+              <p className="mt-1 text-[11px] text-neutral-500">
+                {event.promotion_sales_count} con promoción · {event.regular_sales_count} sin
+                promoción
+              </p>
+              {event.negative_stock_count > 0 ? (
+                <p className="mt-1 text-[11px] text-red-300">
+                  Stock negativo en {event.negative_stock_count}{' '}
+                  {event.negative_stock_count === 1 ? 'insumo' : 'insumos'}
+                </p>
+              ) : null}
             </Link>
           ))}
         </section>

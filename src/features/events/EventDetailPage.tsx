@@ -6,6 +6,7 @@ import { formatDateTime } from '@/features/inventory/inventory-utils'
 import { formatCurrency } from '@/lib/format'
 import { useOnlineStatus } from '@/lib/use-online-status'
 import type { EventExpenseView, EventSaleView, EventStatus } from '@/types/database'
+import { downloadEventReportPdf } from './event-report-pdf'
 import { EventExpenseForm } from './EventExpenseForm'
 import { EventSaleForm } from './EventSaleForm'
 import { useEventSync } from './event-sync-context'
@@ -66,6 +67,8 @@ export function EventDetailPage() {
   const [offlineReady, setOfflineReady] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
   const [editingExpense, setEditingExpense] = useState<EventExpenseView | null>(null)
+  const [pdfError, setPdfError] = useState<string | null>(null)
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false)
 
   const eventPendingSales = pendingSales.filter((sale) => sale.eventId === eventId)
   const eventPendingExpenses = pendingExpenses.filter((expense) => expense.eventId === eventId)
@@ -206,6 +209,29 @@ export function EventDetailPage() {
   const event = bundle.event
   const report = calculateEventReport(bundle, eventPendingSales, eventPendingExpenses)
   const products = productsQuery.data ?? []
+  const isPartial =
+    event.status === 'open' || eventPendingSales.length > 0 || eventPendingExpenses.length > 0
+
+  async function handleDownloadPdf() {
+    setPdfError(null)
+    setIsGeneratingPdf(true)
+
+    try {
+      await downloadEventReportPdf({
+        event,
+        report,
+        expenses: bundle.expenses,
+        pendingExpenses: eventPendingExpenses,
+        inventory: bundle.inventory,
+        generatedByName: profile?.full_name ?? 'Usuario',
+        isPartial,
+      })
+    } catch (error) {
+      setPdfError(error instanceof Error ? error.message : 'No se pudo generar el PDF.')
+    } finally {
+      setIsGeneratingPdf(false)
+    }
+  }
 
   const saleRows: SaleRow[] = [
     ...bundle.sales.map((sale) => ({ kind: 'saved' as const, sale })),
@@ -283,45 +309,97 @@ export function EventDetailPage() {
         </p>
       ) : null}
 
-      <section className="grid grid-cols-2 gap-3">
-        <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-4">
-          <p className="text-[11px] text-neutral-500">Ventas netas</p>
-          <p className="mt-1 text-xl font-semibold">{formatCurrency(report.salesTotal)}</p>
-          <p className="mt-1 text-[11px] text-neutral-500">
-            {report.salesCount} {report.salesCount === 1 ? 'venta' : 'ventas'} ·{' '}
-            {report.drinksCount} {report.drinksCount === 1 ? 'bebida' : 'bebidas'}
-          </p>
+      <section className="space-y-4 rounded-2xl border border-neutral-800 bg-neutral-900 p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-[11px] text-neutral-500">
+              {isPartial ? 'Resultado parcial' : 'Resultado final'}
+            </p>
+            <p
+              className={`mt-1 text-2xl font-semibold ${
+                report.resultTotal >= 0 ? 'text-green-300' : 'text-red-300'
+              }`}
+            >
+              {formatCurrency(report.resultTotal)}
+            </p>
+            <p className="mt-1 text-[11px] text-neutral-500">
+              {report.promotionSalesCount} con promoción · {report.regularSalesCount} sin promoción
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void handleDownloadPdf()}
+            disabled={isGeneratingPdf}
+            className="rounded-xl border border-neutral-700 px-3 py-2 text-xs text-neutral-200 disabled:opacity-50"
+          >
+            {isGeneratingPdf ? 'Generando…' : 'Descargar PDF'}
+          </button>
         </div>
 
-        <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-4">
-          <p className="text-[11px] text-neutral-500">Gastos</p>
-          <p className="mt-1 text-xl font-semibold">{formatCurrency(report.expensesTotal)}</p>
-          <p className="mt-1 text-[11px] text-neutral-500">
-            {report.expensesCount} {report.expensesCount === 1 ? 'gasto' : 'gastos'}
-          </p>
-        </div>
-
-        <div className="col-span-2 rounded-2xl border border-neutral-800 bg-neutral-900 p-4">
-          <div className="flex items-end justify-between gap-3">
-            <div>
-              <p className="text-[11px] text-neutral-500">
-                {event.status === 'open' ? 'Utilidad parcial' : 'Utilidad final'}
-              </p>
-              <p
-                className={`mt-1 text-2xl font-semibold ${
-                  report.profit >= 0 ? 'text-green-300' : 'text-red-300'
-                }`}
-              >
-                {formatCurrency(report.profit)}
-              </p>
-            </div>
-            <div className="text-right text-[11px] text-neutral-500">
-              <p>Margen: {report.marginPercent === null ? '—' : `${report.marginPercent}%`}</p>
-              <p>Descuentos: {formatCurrency(report.discountTotal)}</p>
-              <p>Efectivo esperado: {formatCurrency(report.cashExpected)}</p>
-            </div>
+        <div className="space-y-1.5 text-sm">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-neutral-400">Venta total</span>
+            <span className="font-medium">{formatCurrency(report.salesTotal)}</span>
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-neutral-400">Gastos de insumos</span>
+            <span className="text-red-200">
+              {report.supplyExpensesTotal === 0
+                ? formatCurrency(0)
+                : `-${formatCurrency(report.supplyExpensesTotal)}`}
+            </span>
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-neutral-400">Otros gastos</span>
+            <span className="text-red-200">
+              {report.otherExpensesTotal === 0
+                ? formatCurrency(0)
+                : `-${formatCurrency(report.otherExpensesTotal)}`}
+            </span>
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-neutral-400">Costo de producto/insumos sobrante</span>
+            <span className={report.leftoverInventoryValue < 0 ? 'text-red-300' : 'text-green-200'}>
+              {report.leftoverInventoryValue < 0
+                ? `-${formatCurrency(Math.abs(report.leftoverInventoryValue))}`
+                : `+${formatCurrency(report.leftoverInventoryValue)}`}
+            </span>
+          </div>
+          <div className="flex items-center justify-between gap-3 border-t border-neutral-800 pt-2">
+            <span className="font-semibold">Ganancia</span>
+            <span
+              className={`font-semibold ${
+                report.resultTotal >= 0 ? 'text-green-300' : 'text-red-300'
+              }`}
+            >
+              {formatCurrency(report.resultTotal)}
+            </span>
           </div>
         </div>
+
+        {report.negativeStockCount > 0 ? (
+          <p className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-200">
+            Stock negativo en {report.negativeStockCount}{' '}
+            {report.negativeStockCount === 1 ? 'insumo' : 'insumos'} (
+            {formatCurrency(report.negativeStockValue)}) incluido en el sobrante.
+          </p>
+        ) : null}
+
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-neutral-500">
+          <span>
+            {report.salesCount} {report.salesCount === 1 ? 'venta' : 'ventas'} ·{' '}
+            {report.drinksCount} {report.drinksCount === 1 ? 'bebida' : 'bebidas'}
+          </span>
+          <span>
+            {report.expensesCount} {report.expensesCount === 1 ? 'gasto' : 'gastos'}
+          </span>
+          <span>
+            Margen: {report.resultMarginPercent === null ? '—' : `${report.resultMarginPercent}%`}
+          </span>
+          <span>Efectivo esperado: {formatCurrency(report.cashExpected)}</span>
+        </div>
+
+        {pdfError ? <p className="text-xs text-red-300">{pdfError}</p> : null}
       </section>
 
       <section className="flex flex-wrap gap-2">
