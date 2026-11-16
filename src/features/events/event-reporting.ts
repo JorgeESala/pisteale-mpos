@@ -15,9 +15,18 @@ export type EventReport = {
   grossSales: number
   discountTotal: number
   salesTotal: number
+  supplyExpensesTotal: number
+  otherExpensesTotal: number
   expensesTotal: number
+  leftoverInventoryValue: number
+  negativeStockCount: number
+  negativeStockValue: number
   profit: number
   marginPercent: number | null
+  resultTotal: number
+  resultMarginPercent: number | null
+  promotionSalesCount: number
+  regularSalesCount: number
   salesCount: number
   drinksCount: number
   expensesCount: number
@@ -62,6 +71,8 @@ export function calculateEventReport(
   let discountTotal = event.discount_total
   let salesTotal = event.sales_total
   let drinksCount = event.drinks_count
+  let promotionSalesCount = bundle.sales.filter((sale) => sale.promotion_applied).length
+  let regularSalesCount = bundle.sales.length - promotionSalesCount
 
   for (const sale of pendingSales) {
     const totals = pendingSaleTotals(sale)
@@ -70,19 +81,31 @@ export function calculateEventReport(
     salesTotal += totals.total
     drinksCount += sale.items.reduce((sum, item) => sum + item.quantity, 0)
     paymentBreakdown[sale.paymentMethod].sales += totals.total
+
+    if (sale.applyPromotion) {
+      promotionSalesCount += 1
+    } else {
+      regularSalesCount += 1
+    }
   }
 
-  let expensesTotal = event.expenses_total
+  const supplyExpensesTotal = event.supply_expenses_total ?? 0
+  const otherExpensesTotal =
+    (event.other_expenses_total ?? Math.max(0, event.expenses_total - supplyExpensesTotal)) +
+    pendingExpenses.reduce((sum, expense) => sum + expense.amount, 0)
 
   for (const expense of pendingExpenses) {
-    expensesTotal += expense.amount
     paymentBreakdown[expense.paymentMethod].expenses += expense.amount
   }
+
+  const expensesTotal = roundEventMoney(supplyExpensesTotal + otherExpensesTotal)
+  const leftoverInventoryValue = event.inventory_leftover_value ?? 0
+  const negativeStockCount = event.negative_stock_count ?? 0
+  const negativeStockValue = event.negative_stock_value ?? 0
 
   grossSales = roundEventMoney(grossSales)
   discountTotal = roundEventMoney(discountTotal)
   salesTotal = roundEventMoney(salesTotal)
-  expensesTotal = roundEventMoney(expensesTotal)
 
   for (const method of Object.keys(paymentBreakdown) as PaymentMethod[]) {
     paymentBreakdown[method].sales = roundEventMoney(paymentBreakdown[method].sales)
@@ -91,14 +114,26 @@ export function calculateEventReport(
 
   const profit = roundEventMoney(salesTotal - expensesTotal)
   const marginPercent = salesTotal > 0 ? Math.round((profit / salesTotal) * 1000) / 10 : null
+  const resultTotal = roundEventMoney(salesTotal - expensesTotal + leftoverInventoryValue)
+  const resultMarginPercent =
+    salesTotal > 0 ? Math.round((resultTotal / salesTotal) * 1000) / 10 : null
 
   return {
     grossSales,
     discountTotal,
     salesTotal,
+    supplyExpensesTotal,
+    otherExpensesTotal: roundEventMoney(otherExpensesTotal),
     expensesTotal,
+    leftoverInventoryValue,
+    negativeStockCount,
+    negativeStockValue,
     profit,
     marginPercent,
+    resultTotal,
+    resultMarginPercent,
+    promotionSalesCount,
+    regularSalesCount,
     salesCount: event.sales_count + pendingSales.length,
     drinksCount,
     expensesCount: event.expenses_count + pendingExpenses.length,

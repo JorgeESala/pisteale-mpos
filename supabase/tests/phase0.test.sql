@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select extensions.plan(224);
+select extensions.plan(234);
 
 delete from auth.users
 where id in (
@@ -3345,6 +3345,198 @@ select public.create_event_expense(
   '',
   '2026-11-14T20:00:00-06:00'::timestamptz,
   ''
+);
+
+select public.create_event(
+  'Test Resultado PDF',
+  'Salón de prueba',
+  current_date,
+  '18:00'::time,
+  '23:00'::time,
+  false,
+  2,
+  180,
+  0,
+  ''
+);
+
+select public.upsert_inventory_group(
+  '99999999-9999-4999-8999-999999999992'::uuid,
+  'Test Resultado',
+  (select id from public.inventory_categories where name = 'Destilados'),
+  'ml',
+  false,
+  true
+);
+
+select public.upsert_inventory_item(
+  null,
+  (select id from public.inventory_item_groups where name = 'Test Resultado'),
+  'Test Resultado Vodka',
+  null,
+  'botella',
+  'botella',
+  1000,
+  1,
+  0,
+  true,
+  true
+);
+
+select public.create_event_inventory_load(
+  '21212121-2121-4121-8121-212121212121'::uuid,
+  (select id from public.events where name = 'Test Resultado PDF'),
+  jsonb_build_array(
+    jsonb_build_object(
+      'item_id', (select id from public.inventory_items where name = 'Test Resultado Vodka'),
+      'qty_purchase', 4.5,
+      'purchase_factor', 1000,
+      'total_cost', 4500
+    )
+  ),
+  'supplies',
+  'cash',
+  '',
+  'Carga de resultado'
+);
+
+select public.adjust_event_inventory_item(
+  (select id from public.events where name = 'Test Resultado PDF'),
+  (select id from public.inventory_items where name = 'Test Resultado Vodka'),
+  2000,
+  'Sobrante de resultado'
+);
+
+select public.create_event_expense(
+  '20202020-2020-4020-8020-202020202020'::uuid,
+  (select id from public.events where name = 'Test Resultado PDF'),
+  'other',
+  'Gasto de resultado',
+  300,
+  'cash',
+  '',
+  now(),
+  ''
+);
+
+select public.create_event_sale(
+  '23232323-2323-4323-8323-232323232323'::uuid,
+  (select id from public.events where name = 'Test Resultado PDF'),
+  jsonb_build_array(
+    jsonb_build_object(
+      'product_id', null,
+      'product_name', 'Venta manual',
+      'quantity', 1,
+      'unit_price', 5000,
+      'promotion_eligible', false
+    )
+  ),
+  false,
+  2,
+  180,
+  'cash',
+  '',
+  now()
+);
+
+select extensions.is(
+  (
+    select supply_expenses_total
+    from public.v_events
+    where name = 'Test Resultado PDF'
+  ),
+  4500::numeric,
+  'event result separates supply expenses'
+);
+
+select extensions.is(
+  (
+    select other_expenses_total
+    from public.v_events
+    where name = 'Test Resultado PDF'
+  ),
+  300::numeric,
+  'event result separates other expenses'
+);
+
+select extensions.is(
+  (
+    select inventory_current_value
+    from public.v_events
+    where name = 'Test Resultado PDF'
+  ),
+  2000::numeric,
+  'event result values current inventory'
+);
+
+select extensions.is(
+  (
+    select inventory_transferred_value
+    from public.v_events
+    where name = 'Test Resultado PDF'
+  ),
+  0::numeric,
+  'event result values transferred inventory'
+);
+
+select extensions.is(
+  (
+    select inventory_leftover_value
+    from public.v_events
+    where name = 'Test Resultado PDF'
+  ),
+  2000::numeric,
+  'event result values leftover inventory'
+);
+
+select extensions.is(
+  (
+    select result_total
+    from public.v_events
+    where name = 'Test Resultado PDF'
+  ),
+  2200::numeric,
+  'event result adds leftover inventory to profit'
+);
+
+select extensions.is(
+  (
+    select negative_stock_count
+    from public.v_events
+    where name = 'Test Resultado PDF'
+  ),
+  0,
+  'event result has no negative stock'
+);
+
+select extensions.is(
+  (
+    select promotion_sales_count
+    from public.v_events
+    where name = 'Test Resultado PDF'
+  ),
+  0,
+  'event result counts promotion sales'
+);
+
+select extensions.is(
+  (
+    select regular_sales_count
+    from public.v_events
+    where name = 'Test Resultado PDF'
+  ),
+  1,
+  'event result counts regular sales'
+);
+
+select extensions.is(
+  (
+    select result_margin_percent
+    from public.v_events
+    where name = 'Test Resultado PDF'
+  ),
+  44::numeric,
+  'event result calculates its margin'
 );
 
 select public.admin_set_profile(

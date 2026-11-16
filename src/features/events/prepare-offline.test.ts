@@ -30,6 +30,17 @@ const event: EventView = {
   expenses_count: 0,
   profit: 0,
   margin_percent: null,
+  supply_expenses_total: 0,
+  other_expenses_total: 0,
+  inventory_current_value: 0,
+  inventory_transferred_value: 0,
+  inventory_leftover_value: 0,
+  negative_stock_count: 0,
+  negative_stock_value: 0,
+  result_total: 0,
+  result_margin_percent: null,
+  promotion_sales_count: 0,
+  regular_sales_count: 0,
 }
 
 const product = {
@@ -46,6 +57,7 @@ function seedCaches() {
     sales: [],
     saleItems: [],
     expenses: [],
+    inventory: [],
   })
   saveEventProductsCache('user-1', [product])
 }
