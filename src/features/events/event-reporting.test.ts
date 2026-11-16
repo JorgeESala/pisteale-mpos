@@ -30,6 +30,17 @@ const event: EventView = {
   expenses_count: 1,
   profit: 130,
   margin_percent: 72.2,
+  supply_expenses_total: 0,
+  other_expenses_total: 50,
+  inventory_current_value: 0,
+  inventory_transferred_value: 0,
+  inventory_leftover_value: 0,
+  negative_stock_count: 0,
+  negative_stock_value: 0,
+  result_total: 130,
+  result_margin_percent: 72.2,
+  promotion_sales_count: 1,
+  regular_sales_count: 0,
 }
 
 const pendingSale: PendingEventSale = {
@@ -123,6 +134,7 @@ describe('event report', () => {
         sales: [savedSale],
         saleItems: [],
         expenses: [savedExpense],
+        inventory: [],
       },
       [pendingSale],
       [pendingExpense],
@@ -131,6 +143,7 @@ describe('event report', () => {
     expect(report.salesTotal).toBe(460)
     expect(report.expensesTotal).toBe(80)
     expect(report.profit).toBe(380)
+    expect(report.resultTotal).toBe(380)
     expect(report.salesCount).toBe(2)
     expect(report.drinksCount).toBe(5)
     expect(report.paymentBreakdown.cash.sales).toBe(460)
@@ -145,12 +158,45 @@ describe('event report', () => {
         sales: [],
         saleItems: [],
         expenses: [],
+        inventory: [],
       },
       [pendingSale],
       [],
     )
 
     expect(report.salesTotal).toBe(460)
+  })
+
+  it('adds leftover inventory to the final result', () => {
+    const report = calculateEventReport(
+      {
+        event: {
+          ...event,
+          sales_total: 5000,
+          expenses_total: 4800,
+          supply_expenses_total: 4500,
+          other_expenses_total: 300,
+          inventory_current_value: 2000,
+          inventory_leftover_value: 2000,
+          result_total: 2200,
+          result_margin_percent: 44,
+          promotion_sales_count: 25,
+          regular_sales_count: 20,
+        },
+        sales: [],
+        saleItems: [],
+        expenses: [],
+        inventory: [],
+      },
+      [],
+      [],
+    )
+
+    expect(report.supplyExpensesTotal).toBe(4500)
+    expect(report.otherExpensesTotal).toBe(300)
+    expect(report.leftoverInventoryValue).toBe(2000)
+    expect(report.resultTotal).toBe(2200)
+    expect(report.resultMarginPercent).toBe(44)
   })
 
   it('calculates a negative result', () => {
@@ -162,10 +208,14 @@ describe('event report', () => {
           expenses_total: 250,
           sales_count: 1,
           expenses_count: 1,
+          other_expenses_total: 250,
+          result_total: -150,
+          result_margin_percent: -150,
         },
         sales: [],
         saleItems: [],
         expenses: [],
+        inventory: [],
       },
       [],
       [],
@@ -173,5 +223,6 @@ describe('event report', () => {
 
     expect(report.profit).toBe(-150)
     expect(report.marginPercent).toBe(-150)
+    expect(report.resultTotal).toBe(-150)
   })
 })

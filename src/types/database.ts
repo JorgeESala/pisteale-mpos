@@ -602,6 +602,17 @@ export type EventView = Event & {
   expenses_count: number
   profit: number
   margin_percent: number | null
+  supply_expenses_total: number
+  other_expenses_total: number
+  inventory_current_value: number
+  inventory_transferred_value: number
+  inventory_leftover_value: number
+  negative_stock_count: number
+  negative_stock_value: number
+  result_total: number
+  result_margin_percent: number | null
+  promotion_sales_count: number
+  regular_sales_count: number
 }
 
 export type EventSale = {
