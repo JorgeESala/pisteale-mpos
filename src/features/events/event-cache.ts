@@ -1,6 +1,7 @@
 import type {
   EventExpenseView,
   EventInventoryStock,
+  EventLeftoverCountView,
   EventProduct,
   EventSaleItemView,
   EventSaleView,
@@ -22,10 +23,11 @@ export type EventBundle = {
   saleItems: EventSaleItemView[]
   expenses: EventExpenseView[]
   inventory: EventInventoryStock[]
+  leftoverCounts: EventLeftoverCountView[]
 }
 
 function listKey(userId: string) {
-  return userStorageKey(userId, 'event-list-cache:v3')
+  return userStorageKey(userId, 'event-list-cache:v4')
 }
 
 function productsKey(userId: string) {
@@ -33,7 +35,7 @@ function productsKey(userId: string) {
 }
 
 function detailKey(userId: string, eventId: string) {
-  return userStorageKey(userId, `event-detail-cache:v3:${eventId}`)
+  return userStorageKey(userId, `event-detail-cache:v4:${eventId}`)
 }
 
 function readCache<T>(key: string): T | null {

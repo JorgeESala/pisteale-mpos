@@ -613,6 +613,11 @@ export type EventView = Event & {
   result_margin_percent: number | null
   promotion_sales_count: number
   regular_sales_count: number
+  manual_leftover_value: number
+  automatic_inventory_value: number
+  leftover_item_count: number
+  leftover_counted_items: number
+  leftover_count_complete: boolean
 }
 
 export type EventSale = {
@@ -688,7 +693,7 @@ export type EventExpenseView = EventExpense & {
 export type EventFinanceEdit = {
   id: string
   event_id: string
-  entity_type: 'inventory_load' | 'expense'
+  entity_type: 'inventory_load' | 'expense' | 'leftover_count'
   entity_id: string
   edited_by: string | null
   edited_by_name: string | null
@@ -771,6 +776,35 @@ export type EventInventoryStock = {
   current_qty_base: number
   avg_unit_cost: number
   stock_value: number
+  purchase_unit: string
+  purchase_factor: number
+}
+
+export type EventLeftoverCount = {
+  id: string
+  event_id: string
+  item_id: string
+  quantity: number
+  unit: string
+  unit_factor: number
+  base_qty: number
+  unit_cost: number
+  value: number
+  notes: string
+  counted_by: string | null
+  counted_by_name: string
+  counted_at: string
+  updated_by: string | null
+  updated_by_name: string
+  updated_at: string
+}
+
+export type EventLeftoverCountView = EventLeftoverCount & {
+  item_name: string
+  group_name: string
+  base_unit: BaseUnit
+  purchase_unit: string
+  purchase_factor: number
 }
 
 export type EventProduct = {
@@ -973,6 +1007,12 @@ export type Database = {
         Update: never
         Relationships: []
       }
+      event_leftover_counts: {
+        Row: EventLeftoverCount
+        Insert: never
+        Update: never
+        Relationships: []
+      }
       event_inventory_loads: {
         Row: EventInventoryLoad
         Insert: never
@@ -1069,6 +1109,10 @@ export type Database = {
       }
       v_event_finance_edits: {
         Row: EventFinanceEditView
+        Relationships: []
+      }
+      v_event_leftover_counts: {
+        Row: EventLeftoverCountView
         Relationships: []
       }
       v_inventory_group_costs: {
@@ -1328,6 +1372,10 @@ export type Database = {
           p_spent_at: string
         }
         Returns: string
+      }
+      save_event_leftover_counts: {
+        Args: { p_event_id: string; p_items: Json }
+        Returns: undefined
       }
       upsert_promotion: {
         Args: {

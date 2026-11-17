@@ -82,32 +82,44 @@ export async function fetchEventBundle(userId: string, eventId: string): Promise
   }
 
   try {
-    const [eventResult, salesResult, itemsResult, expensesResult, inventoryResult] =
-      await Promise.all([
-        supabase.from('v_events').select('*').eq('id', eventId).maybeSingle(),
-        supabase
-          .from('v_event_sales')
-          .select('*')
-          .eq('event_id', eventId)
-          .order('sold_at', { ascending: false }),
-        supabase.from('v_event_sale_items').select('*').eq('event_id', eventId).order('created_at'),
-        supabase
-          .from('v_event_expenses')
-          .select('*')
-          .eq('event_id', eventId)
-          .order('spent_at', { ascending: false }),
-        supabase
-          .from('v_event_inventory_stock')
-          .select('*')
-          .eq('event_id', eventId)
-          .order('item_name'),
-      ])
+    const [
+      eventResult,
+      salesResult,
+      itemsResult,
+      expensesResult,
+      inventoryResult,
+      leftoverCountsResult,
+    ] = await Promise.all([
+      supabase.from('v_events').select('*').eq('id', eventId).maybeSingle(),
+      supabase
+        .from('v_event_sales')
+        .select('*')
+        .eq('event_id', eventId)
+        .order('sold_at', { ascending: false }),
+      supabase.from('v_event_sale_items').select('*').eq('event_id', eventId).order('created_at'),
+      supabase
+        .from('v_event_expenses')
+        .select('*')
+        .eq('event_id', eventId)
+        .order('spent_at', { ascending: false }),
+      supabase
+        .from('v_event_inventory_stock')
+        .select('*')
+        .eq('event_id', eventId)
+        .order('item_name'),
+      supabase
+        .from('v_event_leftover_counts')
+        .select('*')
+        .eq('event_id', eventId)
+        .order('item_name'),
+    ])
 
     if (eventResult.error) throw eventResult.error
     if (salesResult.error) throw salesResult.error
     if (itemsResult.error) throw itemsResult.error
     if (expensesResult.error) throw expensesResult.error
     if (inventoryResult.error) throw inventoryResult.error
+    if (leftoverCountsResult.error) throw leftoverCountsResult.error
 
     if (!eventResult.data) {
       throw new Error('Evento no encontrado')
@@ -119,6 +131,7 @@ export async function fetchEventBundle(userId: string, eventId: string): Promise
       saleItems: itemsResult.data,
       expenses: expensesResult.data,
       inventory: inventoryResult.data,
+      leftoverCounts: leftoverCountsResult.data,
     }
 
     saveEventDetailCache(userId, bundle)
@@ -405,6 +418,32 @@ export async function createEventInventoryLoad(
   if (error) throw error
 
   return data
+}
+
+export type SaveEventLeftoverCountsInput = {
+  eventId: string
+  items: Array<{
+    itemId: string
+    quantity: number
+    unit: string
+    unitFactor: number
+    notes: string
+  }>
+}
+
+export async function saveEventLeftoverCounts(input: SaveEventLeftoverCountsInput): Promise<void> {
+  const { error } = await supabase.rpc('save_event_leftover_counts', {
+    p_event_id: input.eventId,
+    p_items: input.items.map((item) => ({
+      item_id: item.itemId,
+      quantity: item.quantity,
+      unit: item.unit,
+      unit_factor: item.unitFactor,
+      notes: item.notes,
+    })),
+  })
+
+  if (error) throw error
 }
 
 export type UpdateEventInventoryLoadInput = {

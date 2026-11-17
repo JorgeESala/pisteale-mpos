@@ -41,6 +41,11 @@ const event: EventView = {
   result_margin_percent: null,
   promotion_sales_count: 0,
   regular_sales_count: 0,
+  manual_leftover_value: 0,
+  automatic_inventory_value: 0,
+  leftover_item_count: 0,
+  leftover_counted_items: 0,
+  leftover_count_complete: true,
 }
 
 const product = {
@@ -58,6 +63,7 @@ function seedCaches() {
     saleItems: [],
     expenses: [],
     inventory: [],
+    leftoverCounts: [],
   })
   saveEventProductsCache('user-1', [product])
 }

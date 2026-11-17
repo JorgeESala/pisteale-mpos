@@ -19,6 +19,10 @@ export type EventReport = {
   otherExpensesTotal: number
   expensesTotal: number
   leftoverInventoryValue: number
+  automaticInventoryValue: number
+  leftoverCountComplete: boolean
+  leftoverCountedItems: number
+  leftoverItemCount: number
   negativeStockCount: number
   negativeStockValue: number
   profit: number
@@ -100,6 +104,10 @@ export function calculateEventReport(
 
   const expensesTotal = roundEventMoney(supplyExpensesTotal + otherExpensesTotal)
   const leftoverInventoryValue = event.inventory_leftover_value ?? 0
+  const automaticInventoryValue = event.automatic_inventory_value ?? 0
+  const leftoverCountComplete = event.leftover_count_complete ?? false
+  const leftoverCountedItems = event.leftover_counted_items ?? 0
+  const leftoverItemCount = event.leftover_item_count ?? 0
   const negativeStockCount = event.negative_stock_count ?? 0
   const negativeStockValue = event.negative_stock_value ?? 0
 
@@ -126,6 +134,10 @@ export function calculateEventReport(
     otherExpensesTotal: roundEventMoney(otherExpensesTotal),
     expensesTotal,
     leftoverInventoryValue,
+    automaticInventoryValue,
+    leftoverCountComplete,
+    leftoverCountedItems,
+    leftoverItemCount,
     negativeStockCount,
     negativeStockValue,
     profit,

@@ -1,4 +1,4 @@
-import type { EventExpenseView, EventInventoryStock, EventView } from '@/types/database'
+import type { EventExpenseView, EventLeftoverCountView, EventView } from '@/types/database'
 import { formatDateTime, formatQty } from '@/features/inventory/inventory-utils'
 import { formatCurrency } from '@/lib/format'
 import { formatEventSchedule } from './event-datetime'
@@ -19,12 +19,12 @@ export type PdfExpense = {
 export type PdfInventoryRow = {
   itemName: string
   groupName: string
-  currentQty: number
-  transferredQty: number
+  quantity: number
+  unit: string
   baseUnit: string
+  baseQty: number
   unitCost: number
   value: number
-  negative: boolean
 }
 
 export type PdfSummaryRow = {
@@ -58,7 +58,7 @@ export type EventPdfInput = {
   report: EventReport
   expenses: EventExpenseView[]
   pendingExpenses: PendingEventExpense[]
-  inventory: EventInventoryStock[]
+  leftoverCounts: EventLeftoverCountView[]
   generatedByName: string
   isPartial: boolean
   generatedAt?: string
@@ -117,32 +117,31 @@ export function buildEventPdfModel(input: EventPdfInput): EventPdfModel {
     })
     .sort((left, right) => dateValue(right.date) - dateValue(left.date))
 
-  const inventory = input.inventory
-    .map((item) => {
-      const value =
-        item.current_qty_base * item.avg_unit_cost + item.transferred_base * item.avg_unit_cost
-
-      return {
-        itemName: item.item_name,
-        groupName: item.group_name,
-        currentQty: item.current_qty_base,
-        transferredQty: item.transferred_base,
-        baseUnit: item.base_unit,
-        unitCost: item.avg_unit_cost,
-        value: Math.round(value * 100) / 100,
-        negative: item.current_qty_base < 0,
-      }
-    })
-    .filter((item) => item.currentQty !== 0 || item.transferredQty > 0)
+  const inventory = input.leftoverCounts
+    .map((count) => ({
+      itemName: count.item_name,
+      groupName: count.group_name,
+      quantity: count.quantity,
+      unit: count.unit,
+      baseUnit: count.base_unit,
+      baseQty: count.base_qty,
+      unitCost: count.unit_cost,
+      value: count.value,
+    }))
     .sort((left, right) => left.itemName.localeCompare(right.itemName))
-
   const warnings: string[] = []
 
   if (report.negativeStockCount > 0) {
     warnings.push(
-      `Stock negativo en ${report.negativeStockCount} ${
+      `Inventario del sistema con stock negativo en ${report.negativeStockCount} ${
         report.negativeStockCount === 1 ? 'insumo' : 'insumos'
-      }: ${formatCurrency(report.negativeStockValue)} incluido en el sobrante.`,
+      }: ${formatCurrency(report.negativeStockValue)}. Revisa el conteo manual.`,
+    )
+  }
+
+  if (!input.report.leftoverCountComplete) {
+    warnings.push(
+      `Conteo de sobrantes pendiente: ${input.report.leftoverCountedItems} de ${input.report.leftoverItemCount} insumos capturados.`,
     )
   }
 
@@ -416,7 +415,7 @@ export async function downloadEventReportPdf(input: EventPdfInput) {
   }
 
   function inventorySection() {
-    sectionTitle('Insumos sobrantes')
+    sectionTitle('Insumos sobrantes (conteo manual)')
 
     if (model.inventory.length === 0) {
       doc.setFont('helvetica', 'normal')
@@ -431,34 +430,26 @@ export async function downloadEventReportPdf(input: EventPdfInput) {
     doc.setFontSize(8)
     doc.setTextColor(95, 95, 105)
     doc.text('Insumo', margin, y)
-    doc.text('En evento', pageWidth - margin - 62, y, { align: 'right' })
-    doc.text('Transferido', pageWidth - margin - 32, y, { align: 'right' })
+    doc.text('Cantidad', pageWidth - margin - 50, y, { align: 'right' })
     doc.text('Valor', pageWidth - margin, y, { align: 'right' })
     y += 5
 
     doc.setFont('helvetica', 'normal')
     for (const row of model.inventory) {
-      const itemLines = doc.splitTextToSize(`${row.itemName} · ${row.groupName}`, 70)
+      const itemLines = doc.splitTextToSize(`${row.itemName} · ${row.groupName}`, 90)
       const rowHeight = Math.max(6, itemLines.length * 3.5) + 4
       ensureSpace(rowHeight)
       doc.setFontSize(9)
-      if (row.negative) {
-        doc.setTextColor(185, 28, 28)
-      } else {
-        doc.setTextColor(45, 45, 50)
-      }
+      doc.setTextColor(45, 45, 50)
       doc.text(itemLines, margin, y)
-      doc.text(formatQty(row.currentQty, row.baseUnit), pageWidth - margin - 62, y, {
-        align: 'right',
-      })
-      doc.text(formatQty(row.transferredQty, row.baseUnit), pageWidth - margin - 32, y, {
+      doc.text(formatQty(row.quantity, row.unit), pageWidth - margin - 50, y, {
         align: 'right',
       })
       doc.text(formatCurrency(row.value), pageWidth - margin, y, { align: 'right' })
       doc.setFontSize(7)
       doc.setTextColor(105, 105, 115)
       doc.text(
-        `Costo unitario: ${formatCurrency(row.unitCost)}/${row.baseUnit}`,
+        `Costo: ${formatCurrency(row.unitCost)}/${row.baseUnit}`,
         margin,
         y + itemLines.length * 3.5 + 1,
       )

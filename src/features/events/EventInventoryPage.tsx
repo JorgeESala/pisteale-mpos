@@ -349,12 +349,20 @@ export function EventInventoryPage() {
           </h1>
           <p className="mt-1 text-sm text-neutral-400">{event.name}</p>
         </div>
-        <Link
-          to={`/eventos/${event.id}`}
-          className="rounded-xl border border-neutral-700 px-3 py-2 text-xs text-neutral-300"
-        >
-          Volver
-        </Link>
+        <div className="flex shrink-0 flex-col gap-2">
+          <Link
+            to={`/eventos/${event.id}/sobrantes`}
+            className="rounded-xl border border-brand-400/40 px-3 py-2 text-center text-xs text-brand-200"
+          >
+            Sobrantes
+          </Link>
+          <Link
+            to={`/eventos/${event.id}`}
+            className="rounded-xl border border-neutral-700 px-3 py-2 text-center text-xs text-neutral-300"
+          >
+            Volver
+          </Link>
+        </div>
       </section>
 
       <section className="flex flex-wrap items-center gap-2 text-xs">
