@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select extensions.plan(234);
+select extensions.plan(240);
 
 delete from auth.users
 where id in (
@@ -3439,6 +3439,19 @@ select public.create_event_sale(
   now()
 );
 
+select public.save_event_leftover_counts(
+  (select id from public.events where name = 'Test Resultado PDF'),
+  jsonb_build_array(
+    jsonb_build_object(
+      'item_id', (select id from public.inventory_items where name = 'Test Resultado Vodka'),
+      'quantity', 2,
+      'unit', 'botella',
+      'unit_factor', 1000,
+      'notes', 'Conteo manual'
+    )
+  )
+);
+
 select extensions.is(
   (
     select supply_expenses_total
@@ -3537,6 +3550,91 @@ select extensions.is(
   ),
   44::numeric,
   'event result calculates its margin'
+);
+
+select extensions.is(
+  (
+    select manual_leftover_value
+    from public.v_events
+    where name = 'Test Resultado PDF'
+  ),
+  2000::numeric,
+  'event result uses the manual leftover value'
+);
+
+select extensions.is(
+  (
+    select leftover_count_complete
+    from public.v_events
+    where name = 'Test Resultado PDF'
+  ),
+  true,
+  'event result marks a complete leftover count'
+);
+
+select extensions.is(
+  (
+    select leftover_counted_items
+    from public.v_events
+    where name = 'Test Resultado PDF'
+  ),
+  1,
+  'event result counts captured leftover items'
+);
+
+select extensions.is(
+  (
+    select leftover_item_count
+    from public.v_events
+    where name = 'Test Resultado PDF'
+  ),
+  1,
+  'event result counts event inventory items'
+);
+
+select extensions.is(
+  (
+    select count(*)
+    from public.event_finance_edits
+    where entity_type = 'leftover_count'
+      and event_id = (select id from public.events where name = 'Test Resultado PDF')
+  ),
+  1::bigint,
+  'leftover count records its history'
+);
+
+select public.upsert_inventory_item(
+  null,
+  (select id from public.inventory_item_groups where name = 'Test Resultado'),
+  'Test Resultado Fuera',
+  null,
+  'botella',
+  'botella',
+  1000,
+  1,
+  0,
+  true,
+  true
+);
+
+select extensions.throws_ok(
+  $sql$
+    select public.save_event_leftover_counts(
+      (select id from public.events where name = 'Test Resultado PDF'),
+      jsonb_build_array(
+        jsonb_build_object(
+          'item_id', (select id from public.inventory_items where name = 'Test Resultado Fuera'),
+          'quantity', 1,
+          'unit', 'botella',
+          'unit_factor', 1000,
+          'notes', ''
+        )
+      )
+    )
+  $sql$,
+  '22023',
+  'Insumo, cantidad o unidad inválida en el conteo',
+  'leftover count rejects items outside the event'
 );
 
 select public.admin_set_profile(
