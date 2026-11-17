@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { EventExpenseView, EventInventoryStock, EventView } from '@/types/database'
+import type { EventExpenseView, EventLeftoverCountView, EventView } from '@/types/database'
 import type { EventReport } from './event-reporting'
 import type { PendingEventExpense } from './offline-queue'
 import { buildEventPdfModel } from './event-report-pdf'
@@ -42,6 +42,11 @@ const event: EventView = {
   result_margin_percent: 44,
   promotion_sales_count: 25,
   regular_sales_count: 20,
+  manual_leftover_value: 2000,
+  automatic_inventory_value: 2000,
+  leftover_item_count: 1,
+  leftover_counted_items: 1,
+  leftover_count_complete: true,
 }
 
 const report: EventReport = {
@@ -52,6 +57,10 @@ const report: EventReport = {
   otherExpensesTotal: 300,
   expensesTotal: 4800,
   leftoverInventoryValue: 2000,
+  automaticInventoryValue: 2000,
+  leftoverCountComplete: true,
+  leftoverCountedItems: 1,
+  leftoverItemCount: 1,
   negativeStockCount: 0,
   negativeStockValue: 0,
   profit: 200,
@@ -119,43 +128,31 @@ const pendingExpense: PendingEventExpense = {
   error: null,
 }
 
-const inventory: EventInventoryStock[] = [
+const leftoverCounts: EventLeftoverCountView[] = [
   {
+    id: 'count-1',
     event_id: 'event-1',
     item_id: 'item-1',
     item_name: 'Vodka',
-    group_id: 'group-1',
     group_name: 'Vodka',
     base_unit: 'ml',
-    track_stock: true,
-    purchased_base: 4000,
-    consumed_base: 2000,
-    transferred_base: 0,
-    adjusted_base: 0,
-    waste_base: 0,
-    current_qty_base: 2000,
-    avg_unit_cost: 1,
-    stock_value: 2000,
-  },
-  {
-    event_id: 'event-1',
-    item_id: 'item-2',
-    item_name: 'Vaso',
-    group_id: 'group-2',
-    group_name: 'Vaso',
-    base_unit: 'pza',
-    track_stock: true,
-    purchased_base: 100,
-    consumed_base: 50,
-    transferred_base: 25,
-    adjusted_base: 0,
-    waste_base: 0,
-    current_qty_base: 25,
-    avg_unit_cost: 2,
-    stock_value: 50,
+    purchase_unit: 'botella',
+    purchase_factor: 1000,
+    quantity: 2,
+    unit: 'botella',
+    unit_factor: 1000,
+    base_qty: 2000,
+    unit_cost: 1,
+    value: 2000,
+    notes: '',
+    counted_by: null,
+    counted_by_name: 'Jorge',
+    counted_at: '2026-11-14T23:00:00.000Z',
+    updated_by: null,
+    updated_by_name: 'Jorge',
+    updated_at: '2026-11-14T23:00:00.000Z',
   },
 ]
-
 describe('event PDF model', () => {
   it('builds the final summary, expenses and leftover inventory', () => {
     const model = buildEventPdfModel({
@@ -163,7 +160,7 @@ describe('event PDF model', () => {
       report,
       expenses: [savedExpense, otherExpense],
       pendingExpenses: [pendingExpense],
-      inventory,
+      leftoverCounts,
       generatedByName: 'Jorge',
       isPartial: false,
       generatedAt: '14 nov 2026, 10:00',
@@ -180,10 +177,10 @@ describe('event PDF model', () => {
     expect(model.salesOrigin).toBe('25 con promoción · 20 sin promoción')
     expect(model.supplyExpenses.map((expense) => expense.id)).toEqual(['expense-1'])
     expect(model.otherExpenses.map((expense) => expense.id)).toEqual(['pending-1', 'expense-2'])
-    expect(model.inventory).toHaveLength(2)
-    const cup = model.inventory.find((item) => item.itemName === 'Vaso')
-    expect(cup?.value).toBe(100)
-    expect(cup?.transferredQty).toBe(25)
+    expect(model.inventory).toHaveLength(1)
+    expect(model.inventory[0]?.quantity).toBe(2)
+    expect(model.inventory[0]?.unit).toBe('botella')
+    expect(model.inventory[0]?.value).toBe(2000)
     expect(model.warnings).toEqual([])
   })
 
@@ -196,24 +193,21 @@ describe('event PDF model', () => {
         negativeStockValue: -100,
         leftoverInventoryValue: 1900,
         resultTotal: 2100,
+        leftoverCountComplete: false,
+        leftoverCountedItems: 0,
+        leftoverItemCount: 1,
       },
       expenses: [],
       pendingExpenses: [],
-      inventory: [
-        {
-          ...inventory[0]!,
-          current_qty_base: -100,
-          stock_value: -100,
-        },
-      ],
+      leftoverCounts,
       generatedByName: 'Jorge',
       isPartial: true,
       generatedAt: '14 nov 2026, 10:00',
     })
 
-    expect(model.inventory[0]?.negative).toBe(true)
-    expect(model.warnings).toHaveLength(2)
-    expect(model.warnings[0]).toContain('Stock negativo')
-    expect(model.warnings[1]).toContain('Resultado parcial')
+    expect(model.warnings).toHaveLength(3)
+    expect(model.warnings[0]).toContain('Inventario del sistema con stock negativo')
+    expect(model.warnings[1]).toContain('Conteo de sobrantes pendiente')
+    expect(model.warnings[2]).toContain('Resultado parcial')
   })
 })

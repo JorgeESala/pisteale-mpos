@@ -131,9 +131,12 @@ export function EventsPage() {
                 {event.promotion_sales_count} con promoción · {event.regular_sales_count} sin
                 promoción
               </p>
+              {!event.leftover_count_complete ? (
+                <p className="mt-1 text-[11px] text-amber-200">Conteo de sobrantes pendiente</p>
+              ) : null}
               {event.negative_stock_count > 0 ? (
                 <p className="mt-1 text-[11px] text-red-300">
-                  Stock negativo en {event.negative_stock_count}{' '}
+                  Inventario del sistema con stock negativo en {event.negative_stock_count}{' '}
                   {event.negative_stock_count === 1 ? 'insumo' : 'insumos'}
                 </p>
               ) : null}

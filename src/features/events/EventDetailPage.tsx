@@ -210,7 +210,10 @@ export function EventDetailPage() {
   const report = calculateEventReport(bundle, eventPendingSales, eventPendingExpenses)
   const products = productsQuery.data ?? []
   const isPartial =
-    event.status === 'open' || eventPendingSales.length > 0 || eventPendingExpenses.length > 0
+    event.status === 'open' ||
+    eventPendingSales.length > 0 ||
+    eventPendingExpenses.length > 0 ||
+    !report.leftoverCountComplete
 
   async function handleDownloadPdf() {
     setPdfError(null)
@@ -222,7 +225,7 @@ export function EventDetailPage() {
         report,
         expenses: bundle.expenses,
         pendingExpenses: eventPendingExpenses,
-        inventory: bundle.inventory,
+        leftoverCounts: bundle.leftoverCounts,
         generatedByName: profile?.full_name ?? 'Usuario',
         isPartial,
       })
@@ -326,14 +329,22 @@ export function EventDetailPage() {
               {report.promotionSalesCount} con promoción · {report.regularSalesCount} sin promoción
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => void handleDownloadPdf()}
-            disabled={isGeneratingPdf}
-            className="rounded-xl border border-neutral-700 px-3 py-2 text-xs text-neutral-200 disabled:opacity-50"
-          >
-            {isGeneratingPdf ? 'Generando…' : 'Descargar PDF'}
-          </button>
+          <div className="flex shrink-0 flex-col gap-2">
+            <Link
+              to={`/eventos/${event.id}/sobrantes`}
+              className="rounded-xl border border-brand-400/40 px-3 py-2 text-center text-xs text-brand-200"
+            >
+              {report.leftoverCountComplete ? 'Editar sobrantes' : 'Registrar sobrantes'}
+            </Link>
+            <button
+              type="button"
+              onClick={() => void handleDownloadPdf()}
+              disabled={isGeneratingPdf}
+              className="rounded-xl border border-neutral-700 px-3 py-2 text-xs text-neutral-200 disabled:opacity-50"
+            >
+              {isGeneratingPdf ? 'Generando…' : 'Descargar PDF'}
+            </button>
+          </div>
         </div>
 
         <div className="space-y-1.5 text-sm">
@@ -377,11 +388,21 @@ export function EventDetailPage() {
           </div>
         </div>
 
+        {!report.leftoverCountComplete ? (
+          <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+            Conteo de sobrantes pendiente: {report.leftoverCountedItems} de{' '}
+            {report.leftoverItemCount} insumos capturados.{' '}
+            <Link to={`/eventos/${event.id}/sobrantes`} className="underline">
+              Registrar conteo
+            </Link>
+          </p>
+        ) : null}
+
         {report.negativeStockCount > 0 ? (
           <p className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-200">
-            Stock negativo en {report.negativeStockCount}{' '}
+            El inventario del sistema tiene stock negativo en {report.negativeStockCount}{' '}
             {report.negativeStockCount === 1 ? 'insumo' : 'insumos'} (
-            {formatCurrency(report.negativeStockValue)}) incluido en el sobrante.
+            {formatCurrency(report.negativeStockValue)}). Revisa el conteo manual.
           </p>
         ) : null}
 
@@ -710,7 +731,11 @@ export function EventDetailPage() {
                 </p>
               </div>
               <span className="rounded-full bg-neutral-800 px-2 py-1 text-[10px] text-neutral-400">
-                {edit.entity_type === 'inventory_load' ? 'Carga' : 'Gasto'}
+                {edit.entity_type === 'inventory_load'
+                  ? 'Carga'
+                  : edit.entity_type === 'leftover_count'
+                    ? 'Sobrantes'
+                    : 'Gasto'}
               </span>
             </div>
           </article>

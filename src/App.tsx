@@ -17,6 +17,7 @@ import { DashboardPage } from '@/features/dashboard/DashboardPage'
 import { EventDetailPage } from '@/features/events/EventDetailPage'
 import { EventFormPage } from '@/features/events/EventFormPage'
 import { EventInventoryPage } from '@/features/events/EventInventoryPage'
+import { EventLeftoverPage } from '@/features/events/EventLeftoverPage'
 import { EventsPage } from '@/features/events/EventsPage'
 import { BottleDetailPage } from '@/features/inventory/BottleDetailPage'
 import { BottlesPage } from '@/features/inventory/BottlesPage'
@@ -279,6 +280,16 @@ export default function App() {
                 <ProtectedRoute>
                   <AppShell>
                     <EventInventoryPage />
+                  </AppShell>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/eventos/:id/sobrantes"
+              element={
+                <ProtectedRoute>
+                  <AppShell>
+                    <EventLeftoverPage />
                   </AppShell>
                 </ProtectedRoute>
               }
