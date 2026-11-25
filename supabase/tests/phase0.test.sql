@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select extensions.plan(266);
+select extensions.plan(279);
 
 delete from auth.users
 where id in (
@@ -2911,6 +2911,81 @@ select extensions.is(
   'duplicate event inventory load is idempotent'
 );
 
+select extensions.is(
+  (
+    select purchase_unit
+    from public.event_inventory_movements
+    where load_id = (
+      select id from public.event_inventory_loads
+      where client_id = '13131313-1313-4313-8313-131313131313'::uuid
+    )
+      and item_id = (select id from public.inventory_items where name = 'Vaso 940 ml')
+      and movement_type = 'purchase'
+  ),
+  'caja'::text,
+  'event load stores purchase unit'
+);
+
+select extensions.is(
+  (
+    select purchase_factor
+    from public.event_inventory_movements
+    where load_id = (
+      select id from public.event_inventory_loads
+      where client_id = '13131313-1313-4313-8313-131313131313'::uuid
+    )
+      and item_id = (select id from public.inventory_items where name = 'Vaso 940 ml')
+      and movement_type = 'purchase'
+  ),
+  25.0000::numeric,
+  'event load stores purchase factor'
+);
+
+select extensions.is(
+  (
+    select qty_purchase
+    from public.event_inventory_movements
+    where load_id = (
+      select id from public.event_inventory_loads
+      where client_id = '13131313-1313-4313-8313-131313131313'::uuid
+    )
+      and item_id = (select id from public.inventory_items where name = 'Vaso 940 ml')
+      and movement_type = 'purchase'
+  ),
+  0.4000::numeric,
+  'event load stores purchase quantity'
+);
+
+select extensions.is(
+  (
+    select source
+    from public.v_inventory_latest_purchases
+    where item_id = (select id from public.inventory_items where name = 'Vaso 940 ml')
+  ),
+  'event'::text,
+  'latest purchase view returns event source'
+);
+
+select extensions.is(
+  (
+    select purchase_unit
+    from public.v_inventory_latest_purchases
+    where item_id = (select id from public.inventory_items where name = 'Vaso 940 ml')
+  ),
+  'caja'::text,
+  'latest purchase view returns event presentation'
+);
+
+select extensions.is(
+  (
+    select presentation_known
+    from public.v_inventory_latest_purchases
+    where item_id = (select id from public.inventory_items where name = 'Vaso 940 ml')
+  ),
+  true,
+  'latest purchase view marks event presentation as known'
+);
+
 select public.create_event_sale(
   '14141414-1414-4414-8414-141414141414'::uuid,
   (select id from public.events where name = 'Test Evento Parque'),
@@ -4176,7 +4251,7 @@ select extensions.is(
 
 select extensions.is(
   public.set_inventory_package_prices(
-    '[{"item_id":"bbbb1111-bbbb-4111-8111-bbbbbbbbbbbb","package_price":100}]'::jsonb
+    '[{"item_id":"bbbb1111-bbbb-4111-8111-bbbbbbbbbbbb","package_price":100,"purchase_unit":"botella","purchase_factor":1000}]'::jsonb
   ),
   1,
   'admin sets a package price'
@@ -4187,6 +4262,20 @@ select extensions.is(
     where id = 'bbbb1111-bbbb-4111-8111-bbbbbbbbbbbb'::uuid),
   100.0000::numeric,
   'package price is stored'
+);
+
+select extensions.is(
+  (select purchase_unit from public.inventory_items
+    where id = 'bbbb1111-bbbb-4111-8111-bbbbbbbbbbbb'::uuid),
+  'botella'::text,
+  'package price presentation unit is stored'
+);
+
+select extensions.is(
+  (select purchase_factor from public.inventory_items
+    where id = 'bbbb1111-bbbb-4111-8111-bbbbbbbbbbbb'::uuid),
+  1000.0000::numeric,
+  'package price presentation factor is stored'
 );
 
 select extensions.is(
@@ -4440,6 +4529,56 @@ select extensions.is(
     where id = 'aaaa1111-aaaa-4111-8111-aaaaaaaaaaaa'::uuid),
   0.100000::numeric,
   'purchase does not change the reference cost'
+);
+
+select extensions.is(
+  (
+    select source
+    from public.v_inventory_latest_purchases
+    where item_id = 'bbbb1111-bbbb-4111-8111-bbbbbbbbbbbb'::uuid
+  ),
+  'purchase'::text,
+  'latest purchase view returns purchase source'
+);
+
+select extensions.is(
+  (
+    select purchase_unit
+    from public.v_inventory_latest_purchases
+    where item_id = 'bbbb1111-bbbb-4111-8111-bbbbbbbbbbbb'::uuid
+  ),
+  'botella'::text,
+  'latest purchase view returns purchase unit'
+);
+
+select extensions.is(
+  (
+    select purchase_factor
+    from public.v_inventory_latest_purchases
+    where item_id = 'bbbb1111-bbbb-4111-8111-bbbbbbbbbbbb'::uuid
+  ),
+  1000.0000::numeric,
+  'latest purchase view returns purchase factor'
+);
+
+select extensions.is(
+  (
+    select package_price
+    from public.v_inventory_latest_purchases
+    where item_id = 'bbbb1111-bbbb-4111-8111-bbbbbbbbbbbb'::uuid
+  ),
+  200.0000::numeric,
+  'latest purchase view returns package price'
+);
+
+select extensions.is(
+  (
+    select presentation_known
+    from public.v_inventory_latest_purchases
+    where item_id = 'bbbb1111-bbbb-4111-8111-bbbbbbbbbbbb'::uuid
+  ),
+  true,
+  'latest purchase view marks purchase presentation as known'
 );
 
 select *

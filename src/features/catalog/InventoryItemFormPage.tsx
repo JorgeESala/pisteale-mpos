@@ -328,7 +328,7 @@ export function InventoryItemFormPage() {
             {isAdmin ? (
               !isNew ? (
                 <Link
-                  to="/insumos/precios"
+                  to="/costos?tab=insumos"
                   className="mt-2 inline-flex text-xs text-brand-300 underline"
                 >
                   {itemQuery.data?.package_price ? 'Editar precio' : 'Capturar precio'}

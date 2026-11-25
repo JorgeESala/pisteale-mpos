@@ -7,6 +7,7 @@ import type {
   InventoryGroupCost,
   InventoryGroupCostHistory,
   InventoryItemView,
+  InventoryLatestPurchase,
   Product,
   ProductCategory,
   ProductCost,
@@ -113,6 +114,8 @@ export async function fetchInventoryItem(id: string): Promise<InventoryItemView 
 export type InventoryPackagePriceInput = {
   itemId: string
   packagePrice: number
+  purchaseUnit?: string
+  purchaseFactor?: number
 }
 
 export async function saveInventoryPackagePrices(
@@ -122,8 +125,42 @@ export async function saveInventoryPackagePrices(
     p_items: input.map((price) => ({
       item_id: price.itemId,
       package_price: price.packagePrice,
+      ...(price.purchaseUnit ? { purchase_unit: price.purchaseUnit } : {}),
+      ...(price.purchaseFactor !== undefined ? { purchase_factor: price.purchaseFactor } : {}),
     })),
   })
+
+  if (error) throw error
+
+  return data
+}
+
+export async function fetchLatestPurchases(): Promise<InventoryLatestPurchase[]> {
+  const { data, error } = await supabase.from('v_inventory_latest_purchases').select('*')
+
+  if (error) throw error
+
+  return data
+}
+
+export async function fetchAllProducts(): Promise<Product[]> {
+  const { data, error } = await supabase.from('products').select('*').order('name')
+
+  if (error) throw error
+
+  return data
+}
+
+export async function fetchAllRecipes(): Promise<Recipe[]> {
+  const { data, error } = await supabase.from('recipes').select('*')
+
+  if (error) throw error
+
+  return data
+}
+
+export async function fetchAllRecipeItems(): Promise<RecipeItem[]> {
+  const { data, error } = await supabase.from('recipe_items').select('*')
 
   if (error) throw error
 

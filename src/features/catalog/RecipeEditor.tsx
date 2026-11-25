@@ -652,7 +652,7 @@ export function RecipeEditor({ product }: { product: Product }) {
                   Hay grupos sin costo, marcas del tier o consumibles sin costo. El margen es
                   estimado hasta capturarlos.{' '}
                   {isAdmin ? (
-                    <Link to="/insumos/precios" className="underline">
+                    <Link to="/costos?tab=insumos" className="underline">
                       Capturar precios de insumos
                     </Link>
                   ) : (
