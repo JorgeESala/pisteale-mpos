@@ -12,8 +12,8 @@ import { GroupsPage } from '@/features/catalog/GroupsPage'
 import { IceDailyPage } from '@/features/catalog/IceDailyPage'
 import { InventoryItemFormPage } from '@/features/catalog/InventoryItemFormPage'
 import { InventoryItemsPage } from '@/features/catalog/InventoryItemsPage'
-import { InventoryPricesPage } from '@/features/catalog/InventoryPricesPage'
 import { ProductFormPage } from '@/features/catalog/ProductFormPage'
+import { CostsPage } from '@/features/costs/CostsPage'
 import { DashboardPage } from '@/features/dashboard/DashboardPage'
 import { EventDetailPage } from '@/features/events/EventDetailPage'
 import { EventFormPage } from '@/features/events/EventFormPage'
@@ -86,6 +86,16 @@ export default function App() {
               }
             />
             <Route
+              path="/costos"
+              element={
+                <ProtectedRoute>
+                  <AppShell>
+                    <CostsPage />
+                  </AppShell>
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/insumos"
               element={
                 <ProtectedRoute>
@@ -127,13 +137,7 @@ export default function App() {
             />
             <Route
               path="/insumos/precios"
-              element={
-                <ProtectedRoute>
-                  <AppShell>
-                    <InventoryPricesPage />
-                  </AppShell>
-                </ProtectedRoute>
-              }
+              element={<Navigate to="/costos?tab=insumos" replace />}
             />
             <Route
               path="/insumos/hielo"

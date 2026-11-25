@@ -8,6 +8,7 @@ const navItems = [
   { label: 'Inicio', href: '/', enabled: true },
   { label: 'Pedidos', href: '/pedidos', enabled: true },
   { label: 'Inventario', href: '/insumos/stock', enabled: true },
+  { label: 'Costos', href: '/costos', enabled: true },
   { label: 'Eventos', href: '/eventos', enabled: true },
   { label: 'Reportes', href: '/reportes', enabled: true },
 ]
@@ -31,7 +32,7 @@ function AppShellLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-dvh bg-neutral-950 text-neutral-100">
-      <header className="sticky top-0 z-10 border-b border-neutral-800 bg-neutral-950/90 backdrop-blur">
+      <header className="sticky top-0 z-10 border-b border-neutral-800 bg-neutral-950/90 backdrop-blur print:hidden">
         <div className="mx-auto flex w-full max-w-md items-center justify-between gap-3 px-4 py-3 md:max-w-2xl">
           <Link to="/perfil" className="min-w-0 transition hover:opacity-80">
             <p className="text-[11px] font-semibold tracking-[0.35em] text-brand-400">PISTEALE</p>
@@ -56,7 +57,7 @@ function AppShellLayout({ children }: { children: ReactNode }) {
         {children}
       </main>
 
-      <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-neutral-800 bg-neutral-950/95 backdrop-blur">
+      <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-neutral-800 bg-neutral-950/95 backdrop-blur print:hidden">
         <div className="mx-auto flex max-w-md items-stretch gap-1 px-2 pb-[max(env(safe-area-inset-bottom),0.5rem)] pt-2 md:max-w-2xl">
           {navItems.map((item) =>
             item.enabled ? (
@@ -65,7 +66,7 @@ function AppShellLayout({ children }: { children: ReactNode }) {
                 to={item.href}
                 end={item.href === '/'}
                 className={({ isActive }) =>
-                  `flex min-h-12 flex-1 items-center justify-center rounded-xl px-2 text-xs font-medium transition ${
+                  `flex min-h-12 flex-1 items-center justify-center rounded-xl px-1 text-[11px] font-medium transition ${
                     isActive ? 'bg-brand-400/10 text-brand-300' : 'text-neutral-500'
                   }`
                 }

@@ -145,6 +145,25 @@ export type InventoryItemView = InventoryItem & {
   recipe_unit_cost: number | null
 }
 
+export type InventoryLatestPurchase = {
+  item_id: string
+  item_name: string
+  group_id: string
+  group_name: string
+  base_unit: BaseUnit
+  source: 'purchase' | 'event'
+  source_label: string
+  purchased_at: string
+  purchase_unit: string
+  purchase_factor: number
+  qty_purchase: number
+  qty_base: number
+  total_cost: number
+  unit_cost: number
+  package_price: number
+  presentation_known: boolean
+}
+
 export type Product = {
   id: string
   name: string
@@ -752,6 +771,9 @@ export type EventInventoryMovement = {
   occurred_at: string
   created_by: string | null
   created_at: string
+  purchase_unit: string | null
+  purchase_factor: number | null
+  qty_purchase: number | null
 }
 
 export type EventInventoryMovementView = EventInventoryMovement & {
@@ -1128,6 +1150,10 @@ export type Database = {
       }
       v_inventory_items: {
         Row: InventoryItemView
+        Relationships: []
+      }
+      v_inventory_latest_purchases: {
+        Row: InventoryLatestPurchase
         Relationships: []
       }
       v_product_costs: {

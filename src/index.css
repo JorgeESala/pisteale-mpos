@@ -35,3 +35,36 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
 }
+
+@media print {
+  header,
+  nav,
+  .no-print {
+    display: none !important;
+  }
+
+  main {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+
+  body {
+    background: #fff !important;
+    color: #111 !important;
+  }
+
+  body * {
+    color: #111 !important;
+  }
+
+  article,
+  section,
+  div {
+    background: transparent !important;
+    border-color: #ccc !important;
+  }
+
+  article {
+    break-inside: avoid;
+  }
+}

@@ -10,7 +10,6 @@ export function InventoryItemsPage() {
   const { profile } = useAuth()
   const [search, setSearch] = useState('')
   const canManageCatalog = profile?.role === 'admin' || profile?.can_manage_catalog === true
-  const isAdmin = profile?.role === 'admin'
 
   const itemsQuery = useQuery({
     queryKey: ['inventory_items'],
@@ -87,14 +86,12 @@ export function InventoryItemsPage() {
           >
             Hielo del día
           </Link>
-          {isAdmin ? (
-            <Link
-              to="/insumos/precios"
-              className="rounded-xl border border-brand-400/40 px-3 py-2 text-sm text-brand-300 transition hover:border-brand-400"
-            >
-              Precios
-            </Link>
-          ) : null}
+          <Link
+            to="/costos?tab=insumos"
+            className="rounded-xl border border-brand-400/40 px-3 py-2 text-sm text-brand-300 transition hover:border-brand-400"
+          >
+            Costos
+          </Link>
           {canManageCatalog ? (
             <Link
               to="/insumos/nuevo"

@@ -61,10 +61,16 @@ describe('packagePresentationLabel', () => {
 
   it('shows kilograms for large g packages', () => {
     expect(packagePresentationLabel('bolsa', 5000, 'g')).toBe('bolsa de 5 kg')
+    expect(packagePresentationLabel('kg', 1000, 'g')).toBe('1 kg')
+  })
+
+  it('shows grams for small g packages', () => {
+    expect(packagePresentationLabel('Gramos', 100, 'g')).toBe('100 g')
   })
 
   it('describes piece packages', () => {
     expect(packagePresentationLabel('caja', 25, 'pza')).toBe('caja de 25 pza')
     expect(packagePresentationLabel('pza', 1, 'pza')).toBe('1 pieza')
+    expect(packagePresentationLabel('pza', 10, 'pza')).toBe('10 pza')
   })
 })

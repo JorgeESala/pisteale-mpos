@@ -40,10 +40,12 @@ export function packagePresentationLabel(
     maximumFractionDigits: 4,
   })
 
+  const normalizedUnit = purchaseUnit.trim().toLocaleLowerCase('es-MX')
+
   if (baseUnit === 'pza') {
-    return purchaseFactor === 1
-      ? '1 pieza'
-      : `${purchaseUnit} de ${quantityFormatter.format(purchaseFactor)} pza`
+    if (purchaseFactor === 1) return '1 pieza'
+    if (normalizedUnit === 'pza') return `${quantityFormatter.format(purchaseFactor)} pza`
+    return `${purchaseUnit} de ${quantityFormatter.format(purchaseFactor)} pza`
   }
 
   if (baseUnit === 'ml' && purchaseFactor >= 1000) {
@@ -51,7 +53,12 @@ export function packagePresentationLabel(
   }
 
   if (baseUnit === 'g' && purchaseFactor >= 1000) {
+    if (normalizedUnit === 'kg') return `${quantityFormatter.format(purchaseFactor / 1000)} kg`
     return `${purchaseUnit} de ${quantityFormatter.format(purchaseFactor / 1000)} kg`
+  }
+
+  if (baseUnit === 'g' && (normalizedUnit === 'g' || normalizedUnit === 'gramos')) {
+    return `${quantityFormatter.format(purchaseFactor)} g`
   }
 
   return `${purchaseUnit} de ${quantityFormatter.format(purchaseFactor)} ${baseUnit}`
