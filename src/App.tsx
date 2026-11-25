@@ -12,6 +12,7 @@ import { GroupsPage } from '@/features/catalog/GroupsPage'
 import { IceDailyPage } from '@/features/catalog/IceDailyPage'
 import { InventoryItemFormPage } from '@/features/catalog/InventoryItemFormPage'
 import { InventoryItemsPage } from '@/features/catalog/InventoryItemsPage'
+import { InventoryPricesPage } from '@/features/catalog/InventoryPricesPage'
 import { ProductFormPage } from '@/features/catalog/ProductFormPage'
 import { DashboardPage } from '@/features/dashboard/DashboardPage'
 import { EventDetailPage } from '@/features/events/EventDetailPage'
@@ -120,6 +121,16 @@ export default function App() {
                 <ProtectedRoute>
                   <AppShell>
                     <DefaultConsumablesPage />
+                  </AppShell>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/insumos/precios"
+              element={
+                <ProtectedRoute>
+                  <AppShell>
+                    <InventoryPricesPage />
                   </AppShell>
                 </ProtectedRoute>
               }

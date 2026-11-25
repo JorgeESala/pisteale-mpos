@@ -4,8 +4,10 @@ import { useEffect } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '@/features/auth/auth-context'
+import { formatUnitCost } from '@/lib/format'
 import { supabase } from '@/lib/supabase'
 import { inventoryItemFormSchema, type InventoryItemForm } from './catalog-schemas'
+import { formatPackagePrice, packagePresentationLabel } from './inventory-pricing'
 import { fetchInventoryGroups, fetchInventoryItem } from './queries'
 
 export function InventoryItemFormPage() {
@@ -16,6 +18,7 @@ export function InventoryItemFormPage() {
   const isNew = id === 'nuevo'
   const itemId = isNew ? undefined : id
   const canManageCatalog = profile?.role === 'admin' || profile?.can_manage_catalog === true
+  const isAdmin = profile?.role === 'admin'
 
   const itemQuery = useQuery({
     queryKey: ['inventory_item', itemId],
@@ -292,22 +295,71 @@ export function InventoryItemFormPage() {
             ) : null}
           </div>
 
-          <div>
-            <label htmlFor="avgCost" className="mb-1.5 block text-sm text-neutral-300">
-              Costo por unidad base
-            </label>
-            <input
-              id="avgCost"
-              type="number"
-              min="0"
-              step="0.0001"
-              className="w-full rounded-xl border border-neutral-700 bg-neutral-950 px-4 py-3 text-base text-neutral-100 outline-none transition focus:border-brand-400"
-              {...register('avgCost', { valueAsNumber: true })}
-            />
-            {errors.avgCost ? (
-              <p className="mt-1.5 text-sm text-red-400">{errors.avgCost.message}</p>
-            ) : null}
+          <div className="rounded-xl border border-neutral-800 bg-neutral-950 p-3">
+            <p className="text-[11px] font-medium text-neutral-400">Precio del paquete</p>
+            {isNew ? (
+              <p className="mt-1 text-xs text-neutral-500">
+                Guarda el insumo y captura su precio en Precios de insumos.
+              </p>
+            ) : itemQuery.data?.package_price ? (
+              <>
+                <p className="mt-1 text-sm font-semibold">
+                  {formatPackagePrice(itemQuery.data.package_price)}
+                </p>
+                <p className="mt-1 text-[11px] text-neutral-500">
+                  {packagePresentationLabel(
+                    itemQuery.data.purchase_unit,
+                    itemQuery.data.purchase_factor,
+                    itemQuery.data.base_unit,
+                  )}
+                </p>
+                <p className="mt-1 text-[11px] text-neutral-500">
+                  Costo para recetas:{' '}
+                  {itemQuery.data.recipe_unit_cost === null
+                    ? '—'
+                    : `${formatUnitCost(itemQuery.data.recipe_unit_cost)} /${itemQuery.data.base_unit}`}
+                </p>
+              </>
+            ) : (
+              <p className="mt-1 text-xs text-amber-300">
+                Sin precio. Las recetas quedarán pendientes.
+              </p>
+            )}
+            {isAdmin ? (
+              !isNew ? (
+                <Link
+                  to="/insumos/precios"
+                  className="mt-2 inline-flex text-xs text-brand-300 underline"
+                >
+                  {itemQuery.data?.package_price ? 'Editar precio' : 'Capturar precio'}
+                </Link>
+              ) : null
+            ) : (
+              <p className="mt-2 text-[11px] text-neutral-500">
+                Solo el administrador captura los precios.
+              </p>
+            )}
           </div>
+        </div>
+
+        <div>
+          <label htmlFor="avgCost" className="mb-1.5 block text-sm text-neutral-300">
+            Costo promedio de compras (inventario)
+          </label>
+          <input
+            id="avgCost"
+            type="number"
+            min="0"
+            step="0.0001"
+            className="w-full rounded-xl border border-neutral-700 bg-neutral-950 px-4 py-3 text-base text-neutral-100 outline-none transition focus:border-brand-400"
+            {...register('avgCost', { valueAsNumber: true })}
+          />
+          <p className="mt-1 text-[11px] text-neutral-500">
+            Se usa para valuar inventario. Para el costo de recetas usa Precios de insumos.
+          </p>
+          {errors.avgCost ? (
+            <p className="mt-1.5 text-sm text-red-400">{errors.avgCost.message}</p>
+          ) : null}
         </div>
 
         <div className="grid grid-cols-2 gap-3">

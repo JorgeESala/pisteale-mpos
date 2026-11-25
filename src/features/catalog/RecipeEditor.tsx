@@ -80,6 +80,7 @@ export function RecipeEditor({ product }: { product: Product }) {
   const { profile } = useAuth()
   const queryClient = useQueryClient()
   const canManageCatalog = profile?.role === 'admin' || profile?.can_manage_catalog === true
+  const isAdmin = profile?.role === 'admin'
 
   const groupsQuery = useQuery({
     queryKey: ['inventory_groups'],
@@ -649,7 +650,14 @@ export function RecipeEditor({ product }: { product: Product }) {
               {!normalTotalComplete || (product.premium_price !== null && !premiumTotalComplete) ? (
                 <p className="pt-1 text-yellow-300">
                   Hay grupos sin costo, marcas del tier o consumibles sin costo. El margen es
-                  estimado hasta capturarlos.
+                  estimado hasta capturarlos.{' '}
+                  {isAdmin ? (
+                    <Link to="/insumos/precios" className="underline">
+                      Capturar precios de insumos
+                    </Link>
+                  ) : (
+                    'Pide al administrador que capture los precios.'
+                  )}
                 </p>
               ) : null}
             </dl>

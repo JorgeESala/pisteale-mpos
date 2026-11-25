@@ -110,6 +110,26 @@ export async function fetchInventoryItem(id: string): Promise<InventoryItemView 
   return data
 }
 
+export type InventoryPackagePriceInput = {
+  itemId: string
+  packagePrice: number
+}
+
+export async function saveInventoryPackagePrices(
+  input: InventoryPackagePriceInput[],
+): Promise<number> {
+  const { data, error } = await supabase.rpc('set_inventory_package_prices', {
+    p_items: input.map((price) => ({
+      item_id: price.itemId,
+      package_price: price.packagePrice,
+    })),
+  })
+
+  if (error) throw error
+
+  return data
+}
+
 export async function fetchRecipe(productId: string): Promise<Recipe | null> {
   const { data, error } = await supabase
     .from('recipes')
