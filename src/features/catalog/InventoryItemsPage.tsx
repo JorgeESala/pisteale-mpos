@@ -3,12 +3,14 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '@/features/auth/auth-context'
 import { formatUnitCost } from '@/lib/format'
+import { formatPackagePrice, packagePresentationLabel } from './inventory-pricing'
 import { fetchInventoryItems } from './queries'
 
 export function InventoryItemsPage() {
   const { profile } = useAuth()
   const [search, setSearch] = useState('')
   const canManageCatalog = profile?.role === 'admin' || profile?.can_manage_catalog === true
+  const isAdmin = profile?.role === 'admin'
 
   const itemsQuery = useQuery({
     queryKey: ['inventory_items'],
@@ -85,6 +87,14 @@ export function InventoryItemsPage() {
           >
             Hielo del día
           </Link>
+          {isAdmin ? (
+            <Link
+              to="/insumos/precios"
+              className="rounded-xl border border-brand-400/40 px-3 py-2 text-sm text-brand-300 transition hover:border-brand-400"
+            >
+              Precios
+            </Link>
+          ) : null}
           {canManageCatalog ? (
             <Link
               to="/insumos/nuevo"
@@ -129,10 +139,16 @@ export function InventoryItemsPage() {
                   </p>
                 </div>
                 <p className="shrink-0 text-sm font-semibold">
-                  {formatUnitCost(item.avg_cost)}
-                  <span className="ml-1 text-[11px] font-normal text-neutral-500">
-                    /{item.base_unit}
-                  </span>
+                  {item.recipe_unit_cost === null ? (
+                    <span className="text-xs font-normal text-amber-300">Sin precio</span>
+                  ) : (
+                    <>
+                      {formatUnitCost(item.recipe_unit_cost)}
+                      <span className="ml-1 text-[11px] font-normal text-neutral-500">
+                        /{item.base_unit}
+                      </span>
+                    </>
+                  )}
                 </p>
               </div>
 
@@ -149,7 +165,17 @@ export function InventoryItemsPage() {
                   </span>
                 ) : null}
                 <span className="rounded-full bg-neutral-800 px-2 py-1 text-neutral-400">
-                  Compra: {item.purchase_unit} = {item.purchase_factor} {item.base_unit}
+                  {item.package_price > 0
+                    ? `${formatPackagePrice(item.package_price)} · ${packagePresentationLabel(
+                        item.purchase_unit,
+                        item.purchase_factor,
+                        item.base_unit,
+                      )}`
+                    : packagePresentationLabel(
+                        item.purchase_unit,
+                        item.purchase_factor,
+                        item.base_unit,
+                      )}
                 </span>
                 <span className="rounded-full bg-neutral-800 px-2 py-1 text-neutral-400">
                   Mínimo: {item.min_stock_base} {item.base_unit}

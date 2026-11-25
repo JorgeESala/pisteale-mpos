@@ -127,6 +127,8 @@ export type InventoryItem = {
   purchase_unit: string
   purchase_factor: number
   avg_cost: number
+  package_price: number
+  package_price_updated_at: string | null
   min_stock_base: number
   track_stock: boolean
   active: boolean
@@ -140,6 +142,7 @@ export type InventoryItemView = InventoryItem & {
   category_name: string | null
   base_unit: BaseUnit
   is_tiered: boolean
+  recipe_unit_cost: number | null
 }
 
 export type Product = {
@@ -1453,6 +1456,10 @@ export type Database = {
           p_active: boolean
         }
         Returns: InventoryItem
+      }
+      set_inventory_package_prices: {
+        Args: { p_items: Json }
+        Returns: number
       }
       upsert_product: {
         Args: {

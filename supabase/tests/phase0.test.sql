@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select extensions.plan(240);
+select extensions.plan(266);
 
 delete from auth.users
 where id in (
@@ -4121,6 +4121,325 @@ select extensions.is(
   ),
   1::bigint,
   'group family is idempotent'
+);
+
+-- Precios manuales por paquete y sincronización con costo de referencia.
+
+reset role;
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claim.sub',
+  '11111111-1111-1111-1111-111111111111',
+  true
+);
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"11111111-1111-1111-1111-111111111111","role":"authenticated"}',
+  true
+);
+
+select extensions.is(
+  (
+    public.upsert_inventory_group(
+      'aaaa1111-aaaa-4111-8111-aaaaaaaaaaaa'::uuid,
+      'Test Precios Paquete',
+      null,
+      'ml',
+      false,
+      true
+    )
+  ).name,
+  'Test Precios Paquete',
+  'admin creates package price group'
+);
+
+select extensions.is(
+  (
+    public.upsert_inventory_item(
+      'bbbb1111-bbbb-4111-8111-bbbbbbbbbbbb'::uuid,
+      'aaaa1111-aaaa-4111-8111-aaaaaaaaaaaa'::uuid,
+      'Test Precio Botella 1L',
+      null,
+      'ingrediente',
+      'botella',
+      1000,
+      0,
+      0,
+      true,
+      true
+    )
+  ).name,
+  'Test Precio Botella 1L',
+  'admin creates package price item'
+);
+
+select extensions.is(
+  public.set_inventory_package_prices(
+    '[{"item_id":"bbbb1111-bbbb-4111-8111-bbbbbbbbbbbb","package_price":100}]'::jsonb
+  ),
+  1,
+  'admin sets a package price'
+);
+
+select extensions.is(
+  (select package_price from public.inventory_items
+    where id = 'bbbb1111-bbbb-4111-8111-bbbbbbbbbbbb'::uuid),
+  100.0000::numeric,
+  'package price is stored'
+);
+
+select extensions.is(
+  (select recipe_unit_cost from public.v_inventory_items
+    where id = 'bbbb1111-bbbb-4111-8111-bbbbbbbbbbbb'::uuid),
+  0.100000::numeric,
+  'package price derives the recipe unit cost'
+);
+
+select extensions.is(
+  (select reference_cost from public.inventory_item_groups
+    where id = 'aaaa1111-aaaa-4111-8111-aaaaaaaaaaaa'::uuid),
+  0.100000::numeric,
+  'package price syncs the group reference cost'
+);
+
+select extensions.is(
+  (
+    select new_cost
+    from public.inventory_group_cost_history
+    where group_id = 'aaaa1111-aaaa-4111-8111-aaaaaaaaaaaa'::uuid
+    order by created_at desc
+    limit 1
+  ),
+  0.100000::numeric,
+  'package price change is recorded in cost history'
+);
+
+select extensions.is(
+  (
+    public.upsert_inventory_group(
+      'aaaa2222-aaaa-4222-8222-aaaaaaaaaaaa'::uuid,
+      'Test Precios Pieza',
+      null,
+      'pza',
+      false,
+      true
+    )
+  ).name,
+  'Test Precios Pieza',
+  'admin creates piece price group'
+);
+
+select extensions.is(
+  (
+    public.upsert_inventory_item(
+      'bbbb2222-bbbb-4222-8222-bbbbbbbbbbbb'::uuid,
+      'aaaa2222-aaaa-4222-8222-aaaaaaaaaaaa'::uuid,
+      'Test Precio Limón',
+      null,
+      'ingrediente',
+      'pza',
+      1,
+      0,
+      0,
+      true,
+      true
+    )
+  ).name,
+  'Test Precio Limón',
+  'admin creates piece price item'
+);
+
+select extensions.is(
+  public.set_inventory_package_prices(
+    '[{"item_id":"bbbb2222-bbbb-4222-8222-bbbbbbbbbbbb","package_price":1.495}]'::jsonb
+  ),
+  1,
+  'admin sets a piece package price'
+);
+
+select extensions.is(
+  (select package_price from public.inventory_items
+    where id = 'bbbb2222-bbbb-4222-8222-bbbbbbbbbbbb'::uuid),
+  1.4950::numeric,
+  'piece package price keeps four decimals'
+);
+
+select extensions.is(
+  (select reference_cost from public.inventory_item_groups
+    where id = 'aaaa2222-aaaa-4222-8222-aaaaaaaaaaaa'::uuid),
+  1.495000::numeric,
+  'piece package price syncs the reference cost'
+);
+
+select extensions.is(
+  (select recipe_unit_cost from public.v_inventory_items
+    where id = 'bbbb2222-bbbb-4222-8222-bbbbbbbbbbbb'::uuid),
+  1.495000::numeric,
+  'piece package price derives the recipe unit cost'
+);
+
+select extensions.is(
+  (
+    public.upsert_inventory_group(
+      'aaaa3333-aaaa-4333-8333-aaaaaaaaaaaa'::uuid,
+      'Test Precios Multi',
+      null,
+      'ml',
+      false,
+      true
+    )
+  ).name,
+  'Test Precios Multi',
+  'admin creates multi-item price group'
+);
+
+select extensions.is(
+  (
+    public.upsert_inventory_item(
+      'bbbb3333-bbbb-4333-8333-bbbbbbbbbbbb'::uuid,
+      'aaaa3333-aaaa-4333-8333-aaaaaaaaaaaa'::uuid,
+      'Test Precio Multi A',
+      null,
+      'ingrediente',
+      'botella',
+      750,
+      0,
+      0,
+      true,
+      true
+    )
+  ).name,
+  'Test Precio Multi A',
+  'admin creates first multi-item price item'
+);
+
+select extensions.is(
+  (
+    public.upsert_inventory_item(
+      'bbbb4444-bbbb-4444-8444-bbbbbbbbbbbb'::uuid,
+      'aaaa3333-aaaa-4333-8333-aaaaaaaaaaaa'::uuid,
+      'Test Precio Multi B',
+      null,
+      'ingrediente',
+      'botella',
+      750,
+      0,
+      0,
+      true,
+      true
+    )
+  ).name,
+  'Test Precio Multi B',
+  'admin creates second multi-item price item'
+);
+
+select extensions.is(
+  public.set_inventory_package_prices(
+    '[{"item_id":"bbbb3333-bbbb-4333-8333-bbbbbbbbbbbb","package_price":300}]'::jsonb
+  ),
+  1,
+  'admin sets a price in a multi-item group'
+);
+
+select extensions.is(
+  (select package_price from public.inventory_items
+    where id = 'bbbb3333-bbbb-4333-8333-bbbbbbbbbbbb'::uuid),
+  300.0000::numeric,
+  'multi-item package price is stored'
+);
+
+select extensions.is(
+  (select recipe_unit_cost from public.v_inventory_items
+    where id = 'bbbb3333-bbbb-4333-8333-bbbbbbbbbbbb'::uuid),
+  0.400000::numeric,
+  'multi-item package price derives the recipe unit cost'
+);
+
+select extensions.is(
+  (select reference_cost from public.inventory_item_groups
+    where id = 'aaaa3333-aaaa-4333-8333-aaaaaaaaaaaa'::uuid),
+  null::numeric,
+  'multi-item group keeps its reference cost unchanged'
+);
+
+select extensions.is(
+  (
+    select count(*)::integer
+    from public.inventory_group_cost_history
+    where group_id = 'aaaa3333-aaaa-4333-8333-aaaaaaaaaaaa'::uuid
+  ),
+  0,
+  'multi-item group does not record package price history'
+);
+
+reset role;
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claim.sub',
+  '22222222-2222-2222-2222-222222222222',
+  true
+);
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"22222222-2222-2222-2222-222222222222","role":"authenticated"}',
+  true
+);
+
+select extensions.throws_ok(
+  $sql$select public.set_inventory_package_prices('[{"item_id":"bbbb1111-bbbb-4111-8111-bbbbbbbbbbbb","package_price":1}]'::jsonb)$sql$,
+  '42501',
+  'No autorizado',
+  'operator cannot set package prices'
+);
+
+reset role;
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claim.sub',
+  '11111111-1111-1111-1111-111111111111',
+  true
+);
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"11111111-1111-1111-1111-111111111111","role":"authenticated"}',
+  true
+);
+
+select extensions.ok(
+  (
+    public.create_purchase(
+      current_date,
+      'Proveedor precios',
+      'PP-001',
+      '',
+      '[{"item_id":"bbbb1111-bbbb-4111-8111-bbbbbbbbbbbb","qty_purchase":1,"total_cost":200}]'::jsonb
+    )
+  ) is not null,
+  'admin creates a purchase for the package price item'
+);
+
+select extensions.is(
+  (select avg_cost from public.inventory_items
+    where id = 'bbbb1111-bbbb-4111-8111-bbbbbbbbbbbb'::uuid),
+  0.200000::numeric,
+  'purchase updates the inventory average cost'
+);
+
+select extensions.is(
+  (select package_price from public.inventory_items
+    where id = 'bbbb1111-bbbb-4111-8111-bbbbbbbbbbbb'::uuid),
+  100.0000::numeric,
+  'purchase does not change the package price'
+);
+
+select extensions.is(
+  (select reference_cost from public.inventory_item_groups
+    where id = 'aaaa1111-aaaa-4111-8111-aaaaaaaaaaaa'::uuid),
+  0.100000::numeric,
+  'purchase does not change the reference cost'
 );
 
 select *
