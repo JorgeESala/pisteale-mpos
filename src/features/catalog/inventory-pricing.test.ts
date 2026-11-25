@@ -41,10 +41,11 @@ describe('parsePackagePriceInput', () => {
 })
 
 describe('formatPackagePrice', () => {
-  it('keeps up to four decimals when needed', () => {
+  it('keeps up to four decimals for small prices and two for larger ones', () => {
     expect(formatPackagePrice(100)).toBe('$100.00')
     expect(formatPackagePrice(1.495)).toBe('$1.495')
-    expect(formatPackagePrice(214.2878)).toBe('$214.2878')
+    expect(formatPackagePrice(214.2878)).toBe('$214.29')
+    expect(formatPackagePrice(71.4998)).toBe('$71.50')
   })
 })
 

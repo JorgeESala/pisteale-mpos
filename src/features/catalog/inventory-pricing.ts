@@ -27,7 +27,7 @@ export function formatPackagePrice(value: number): string {
     style: 'currency',
     currency: 'MXN',
     minimumFractionDigits: 2,
-    maximumFractionDigits: 4,
+    maximumFractionDigits: Math.abs(value) < 10 ? 4 : 2,
   }).format(value)
 }
 
