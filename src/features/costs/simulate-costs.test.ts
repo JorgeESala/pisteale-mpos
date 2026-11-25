@@ -7,7 +7,12 @@ import type {
   RecipeDefaultConsumableView,
   RecipeItem,
 } from '@/types/database'
-import { simulateProductCosts, type PriceDraft, type SimulateCostsInput } from './simulate-costs'
+import {
+  manualPriceIsNewer,
+  simulateProductCosts,
+  type PriceDraft,
+  type SimulateCostsInput,
+} from './simulate-costs'
 
 const now = '2026-11-25T00:00:00.000Z'
 
@@ -256,6 +261,38 @@ describe('simulateProductCosts', () => {
 
     expect(result!.normalRecipeCost).toBe(20)
     expect(result!.normalCost).toBe(26.14)
+  })
+
+  it('considers a manual price newer than an older purchase', () => {
+    const manualItem = item({
+      id: 'ron-item',
+      name: 'Ron',
+      group_id: 'ron',
+      base_unit: 'ml',
+      package_price: 100,
+      package_price_updated_at: '2026-11-25T00:00:00.000Z',
+    })
+
+    expect(
+      manualPriceIsNewer(manualItem, {
+        item_id: 'ron-item',
+        item_name: 'Ron',
+        group_id: 'ron',
+        group_name: 'Ron',
+        base_unit: 'ml',
+        source: 'event',
+        source_label: 'EVT-2026-00001',
+        purchased_at: '2026-11-14T00:00:00.000Z',
+        purchase_unit: 'botella',
+        purchase_factor: 1000,
+        qty_purchase: 5,
+        qty_base: 5000,
+        total_cost: 690,
+        unit_cost: 0.138,
+        package_price: 138,
+        presentation_known: true,
+      }),
+    ).toBe(true)
   })
 
   it('marks a product without recipe', () => {

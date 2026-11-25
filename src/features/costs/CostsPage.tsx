@@ -20,6 +20,7 @@ import { CostsPricesPanel } from './CostsPricesPanel'
 import {
   ICE_PRICE_PER_GRAM,
   buildInitialDrafts,
+  manualPriceIsNewer,
   parseDraftCost,
   simulateProductCosts,
   type PriceDraft,
@@ -32,10 +33,12 @@ function roundPackagePrice(value: number): number {
 }
 
 function isOutdated(
+  item: InventoryItemView,
   draft: PriceDraft | undefined,
   latest: InventoryLatestPurchase | undefined,
 ): boolean {
   if (!latest) return false
+  if (manualPriceIsNewer(item, latest)) return false
   if (!draft) return true
 
   const draftCost = parseDraftCost(draft)
@@ -132,13 +135,29 @@ export function CostsPage() {
     [draftOverrides, initialDrafts],
   )
 
+  const iceGroupId = useMemo(
+    () => (defaultsQuery.data ?? []).find((item) => item.role === 'ice')?.group_id,
+    [defaultsQuery.data],
+  )
+
+  const fixedIceItemIds = useMemo(
+    () =>
+      new Set(
+        (itemsQuery.data ?? [])
+          .filter((item) => item.group_id === iceGroupId)
+          .map((item) => item.id),
+      ),
+    [iceGroupId, itemsQuery.data],
+  )
+
   const latestByItem = useMemo(() => {
     const map = new Map<string, InventoryLatestPurchase>()
     for (const latest of latestPurchasesQuery.data ?? []) {
+      if (fixedIceItemIds.has(latest.item_id)) continue
       map.set(latest.item_id, latest)
     }
     return map
-  }, [latestPurchasesQuery.data])
+  }, [fixedIceItemIds, latestPurchasesQuery.data])
 
   const categoryNames = useMemo(() => {
     const map = new Map<string, string>()
@@ -201,7 +220,7 @@ export function CostsPage() {
   ).length
 
   const outdatedCount = activeItems.filter((item) =>
-    isOutdated(drafts[item.id], latestByItem.get(item.id)),
+    isOutdated(item, drafts[item.id], latestByItem.get(item.id)),
   ).length
 
   const changes = activeItems.filter((item) => {
@@ -305,7 +324,7 @@ export function CostsPage() {
         purchaseFactor: String(item.purchase_factor),
       }
 
-      if (!isOutdated(draft, latest)) continue
+      if (!isOutdated(item, draft, latest)) continue
 
       next[item.id] = latest.presentation_known
         ? {
@@ -445,6 +464,7 @@ export function CostsPage() {
           savePending={saveMutation.isPending}
           changesCount={changes.length}
           outdatedCount={outdatedCount}
+          fixedIceItemIds={fixedIceItemIds}
           hasInvalid={hasInvalid}
           savedMessage={savedMessage}
           saveError={saveMutation.isError ? saveMutation.error.message : null}
