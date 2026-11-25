@@ -198,6 +198,7 @@ export function CostsPricesPanel({
               Math.abs(latest.purchase_factor - (draftFactor || 0)) > 0.0001)
 
           const outdated = priceDiff || presentationDiff
+          const needsPresentationReview = latest !== undefined && !latest.presentation_known
           const latestPresentation =
             latest !== undefined
               ? packagePresentationLabel(
@@ -312,7 +313,7 @@ export function CostsPricesPanel({
               {latest ? (
                 <div
                   className={`rounded-xl border p-3 text-xs ${
-                    outdated
+                    outdated || needsPresentationReview
                       ? 'border-amber-500/30 bg-amber-500/10'
                       : 'border-neutral-800 bg-neutral-950'
                   }`}
@@ -352,9 +353,18 @@ export function CostsPricesPanel({
                         <p className="mt-1 text-neutral-500">
                           La última compra no coincide con la simulación.
                         </p>
+                      ) : needsPresentationReview ? (
+                        <p className="mt-1 text-amber-300">
+                          Costo al día; falta confirmar la presentación histórica.
+                        </p>
                       ) : (
                         <p className="mt-1 text-green-300">Al día con la última compra.</p>
                       )}
+                      {canEdit && needsPresentationReview && !outdated ? (
+                        <p className="mt-1 text-neutral-500">
+                          Ajusta la presentación arriba si no coincide con la compra.
+                        </p>
+                      ) : null}
                     </div>
 
                     {canEdit && outdated ? (
