@@ -1,6 +1,7 @@
 import type {
   InventoryGroupCost,
   InventoryItemView,
+  InventoryLatestPurchase,
   Product,
   Recipe,
   RecipeDefaultConsumableView,
@@ -349,4 +350,12 @@ export function buildInitialDrafts(
   }
 
   return drafts
+}
+
+export function manualPriceIsNewer(
+  item: InventoryItemView,
+  latest: InventoryLatestPurchase,
+): boolean {
+  if (!item.package_price_updated_at) return false
+  return new Date(item.package_price_updated_at).getTime() > new Date(latest.purchased_at).getTime()
 }

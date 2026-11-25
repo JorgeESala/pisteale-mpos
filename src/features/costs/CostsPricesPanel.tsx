@@ -6,7 +6,7 @@ import type {
   InventoryItemView,
   InventoryLatestPurchase,
 } from '@/types/database'
-import { parseDraftCost, type PriceDraft } from './simulate-costs'
+import { manualPriceIsNewer, parseDraftCost, type PriceDraft } from './simulate-costs'
 
 type PriceFilter = 'all' | 'missing' | 'used'
 
@@ -26,6 +26,7 @@ type CostsPricesPanelProps = {
   savePending: boolean
   changesCount: number
   outdatedCount: number
+  fixedIceItemIds: Set<string>
   hasInvalid: boolean
   savedMessage: string | null
   saveError: string | null
@@ -57,6 +58,7 @@ export function CostsPricesPanel({
   savePending,
   changesCount,
   outdatedCount,
+  fixedIceItemIds,
   hasInvalid,
   savedMessage,
   saveError,
@@ -197,7 +199,9 @@ export function CostsPricesPanel({
             (latest.purchase_unit !== draft?.purchaseUnit ||
               Math.abs(latest.purchase_factor - (draftFactor || 0)) > 0.0001)
 
-          const outdated = priceDiff || presentationDiff
+          const isFixedIce = fixedIceItemIds.has(item.id)
+          const manualNewer = latest !== undefined && manualPriceIsNewer(item, latest)
+          const outdated = !manualNewer && (priceDiff || presentationDiff)
           const needsPresentationReview = latest !== undefined && !latest.presentation_known
           const latestPresentation =
             latest !== undefined
@@ -245,7 +249,7 @@ export function CostsPricesPanel({
                     min="0"
                     step="0.0001"
                     inputMode="decimal"
-                    disabled={!canEdit || savePending}
+                    disabled={!canEdit || savePending || isFixedIce}
                     value={draft?.packagePrice ?? ''}
                     onChange={(event) =>
                       onDraftChange(item.id, {
@@ -267,7 +271,7 @@ export function CostsPricesPanel({
                   <input
                     id={`unit-${item.id}`}
                     type="text"
-                    disabled={!canEdit || savePending}
+                    disabled={!canEdit || savePending || isFixedIce}
                     value={draft?.purchaseUnit ?? item.purchase_unit}
                     onChange={(event) =>
                       onDraftChange(item.id, {
@@ -291,7 +295,7 @@ export function CostsPricesPanel({
                     type="number"
                     min="0.0001"
                     step="0.0001"
-                    disabled={!canEdit || savePending}
+                    disabled={!canEdit || savePending || isFixedIce}
                     value={draft?.purchaseFactor ?? String(item.purchase_factor)}
                     onChange={(event) =>
                       onDraftChange(item.id, {
@@ -310,7 +314,12 @@ export function CostsPricesPanel({
                 {draftCost === null ? ' · Sin precio' : ''}
               </p>
 
-              {latest ? (
+              {isFixedIce ? (
+                <div className="rounded-xl border border-brand-400/20 bg-brand-400/5 p-3 text-xs text-brand-200">
+                  Hielo fijo: $30.00 / 5 kg. La simulación siempre usa este valor y no se sincroniza
+                  con compras.
+                </div>
+              ) : latest ? (
                 <div
                   className={`rounded-xl border p-3 text-xs ${
                     outdated || needsPresentationReview
@@ -349,7 +358,11 @@ export function CostsPricesPanel({
                           Presentación distinta: {draftPresentation} → {latestPresentation}.
                         </p>
                       ) : null}
-                      {outdated ? (
+                      {manualNewer ? (
+                        <p className="mt-1 text-neutral-500">
+                          Precio manual más reciente que esta compra; no se marca como pendiente.
+                        </p>
+                      ) : outdated ? (
                         <p className="mt-1 text-neutral-500">
                           La última compra no coincide con la simulación.
                         </p>
