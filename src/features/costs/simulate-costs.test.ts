@@ -220,6 +220,28 @@ describe('simulateProductCosts', () => {
     expect(result!.normalMargin).toBe(103.86)
     expect(result!.premiumCost).toBe(16.14)
     expect(result!.premiumMargin).toBe(133.86)
+
+    const detail = result!.details.normal
+    expect(detail.ingredientLines).toHaveLength(1)
+    expect(detail.ingredientLines[0]).toMatchObject({
+      groupName: 'Ron',
+      itemName: 'Ron',
+      qtyBase: 100,
+      unitCost: 0.1,
+      lineCost: 10,
+      missing: false,
+    })
+    expect(detail.consumableLines).toHaveLength(4)
+    expect(detail.consumableLines.find((line) => line.role === 'ice')).toMatchObject({
+      grams: 756,
+      lineCost: 4.54,
+      missing: false,
+    })
+    expect(detail.recipeCost).toBe(10)
+    expect(detail.consumablesCost).toBe(6.14)
+    expect(detail.totalCost).toBe(16.14)
+    expect(detail.margin).toBe(103.86)
+    expect(result!.details.premium?.totalCost).toBe(16.14)
   })
 
   it('marks the product pending when an ingredient has no draft price', () => {
@@ -239,6 +261,12 @@ describe('simulateProductCosts', () => {
         expect.objectContaining({ type: 'ingredient', label: 'Falta precio de Ron' }),
       ]),
     )
+    expect(result!.details.normal.ingredientLines[0]).toMatchObject({
+      groupName: 'Ron',
+      unitCost: null,
+      lineCost: null,
+      missing: true,
+    })
   })
 
   it('uses the group reference cost for multi-item groups', () => {
@@ -261,6 +289,14 @@ describe('simulateProductCosts', () => {
 
     expect(result!.normalRecipeCost).toBe(20)
     expect(result!.normalCost).toBe(26.14)
+    expect(result!.details.normal.ingredientLines[0]).toMatchObject({
+      groupName: 'Ron',
+      itemName: null,
+      itemCount: 2,
+      unitCost: 0.2,
+      lineCost: 20,
+      missing: false,
+    })
   })
 
   it('considers a manual price newer than an older purchase', () => {
@@ -304,5 +340,7 @@ describe('simulateProductCosts', () => {
 
     expect(result!.status).toBe('no_recipe')
     expect(result!.gaps[0]?.label).toBe('Sin receta')
+    expect(result!.details.normal.ingredientLines).toEqual([])
+    expect(result!.details.normal.totalCost).toBeNull()
   })
 })
