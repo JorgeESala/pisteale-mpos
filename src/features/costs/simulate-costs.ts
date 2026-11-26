@@ -1,4 +1,5 @@
 import type {
+  BaseUnit,
   InventoryGroupCost,
   InventoryItemView,
   InventoryLatestPurchase,
@@ -24,6 +25,44 @@ export type CostGap = {
   tier?: 'normal' | 'premium'
 }
 
+export type SimulatedIngredientLine = {
+  groupId: string
+  groupName: string
+  itemName: string | null
+  itemCount: number
+  purchaseUnit: string | null
+  purchaseFactor: number | null
+  packagePrice: number | null
+  unitCost: number | null
+  qtyBase: number
+  inputQty: number | null
+  inputUnit: string | null
+  baseUnit: BaseUnit
+  lineCost: number | null
+  missing: boolean
+}
+
+export type SimulatedConsumableLine = {
+  role: RecipeDefaultConsumableView['role']
+  groupId: string
+  groupName: string
+  qty: number | null
+  grams: number | null
+  unitCost: number | null
+  lineCost: number | null
+  missing: boolean
+}
+
+export type SimulatedTierDetail = {
+  tier: 'normal' | 'premium'
+  ingredientLines: SimulatedIngredientLine[]
+  consumableLines: SimulatedConsumableLine[]
+  recipeCost: number | null
+  consumablesCost: number | null
+  totalCost: number | null
+  margin: number | null
+}
+
 export type SimulatedProductCost = {
   product: Product
   normalRecipeCost: number | null
@@ -35,6 +74,10 @@ export type SimulatedProductCost = {
   premiumMargin: number | null
   status: 'complete' | 'pending' | 'no_recipe'
   gaps: CostGap[]
+  details: {
+    normal: SimulatedTierDetail
+    premium: SimulatedTierDetail | null
+  }
 }
 
 export type SimulateCostsInput = {
@@ -98,6 +141,60 @@ function groupUnitCost(
     : (group.reference_cost ?? group.standard_avg_cost)
 }
 
+type GroupPricing = {
+  unitCost: number | null
+  itemName: string | null
+  itemCount: number
+  purchaseUnit: string | null
+  purchaseFactor: number | null
+  packagePrice: number | null
+}
+
+function resolveGroupPricing(
+  group: InventoryGroupCost,
+  tierRule: string,
+  drinkTier: 'normal' | 'premium',
+  activeItems: InventoryItemView[],
+  draft: PriceDraft | undefined,
+): GroupPricing {
+  if (activeItems.length === 1) {
+    const item = activeItems[0]!
+
+    if (draft !== undefined) {
+      const unitCost = parseDraftCost(draft)
+      const price = Number(draft.packagePrice)
+      const factor = Number(draft.purchaseFactor)
+
+      return {
+        unitCost,
+        itemName: item.name,
+        itemCount: 1,
+        purchaseUnit: draft.purchaseUnit || item.purchase_unit,
+        purchaseFactor: Number.isFinite(factor) && factor > 0 ? factor : null,
+        packagePrice: Number.isFinite(price) && price > 0 ? price : null,
+      }
+    }
+
+    return {
+      unitCost: groupUnitCost(group, tierRule, drinkTier, undefined),
+      itemName: item.name,
+      itemCount: 1,
+      purchaseUnit: item.purchase_unit,
+      purchaseFactor: item.purchase_factor,
+      packagePrice: null,
+    }
+  }
+
+  return {
+    unitCost: groupUnitCost(group, tierRule, drinkTier, undefined),
+    itemName: null,
+    itemCount: activeItems.length,
+    purchaseUnit: null,
+    purchaseFactor: null,
+    packagePrice: null,
+  }
+}
+
 function gapLabel(
   group: InventoryGroupCost,
   activeItems: InventoryItemView[],
@@ -136,6 +233,18 @@ function gapLabel(
     type: 'ingredient',
     label: `Falta costo de referencia en ${group.name}`,
     search: group.name,
+  }
+}
+
+function emptyDetail(tier: 'normal' | 'premium'): SimulatedTierDetail {
+  return {
+    tier,
+    ingredientLines: [],
+    consumableLines: [],
+    recipeCost: null,
+    consumablesCost: null,
+    totalCost: null,
+    margin: null,
   }
 }
 
@@ -185,6 +294,10 @@ export function simulateProductCosts(input: SimulateCostsInput): SimulatedProduc
         premiumMargin: null,
         status: 'no_recipe',
         gaps,
+        details: {
+          normal: emptyDetail('normal'),
+          premium: product.premium_price === null ? null : emptyDetail('premium'),
+        },
       }
     }
 
@@ -193,15 +306,23 @@ export function simulateProductCosts(input: SimulateCostsInput): SimulatedProduc
       normal: null,
       premium: null,
     }
+    const ingredientLines: Record<'normal' | 'premium', SimulatedIngredientLine[]> = {
+      normal: [],
+      premium: [],
+    }
 
     for (const drinkTier of ['normal', 'premium'] as const) {
       if (drinkTier === 'premium' && product.premium_price === null) continue
 
       let batchCost = 0
       let complete = true
+      const tierLines: SimulatedIngredientLine[] = []
 
       for (const line of lines) {
         const group = groupById.get(line.inventory_group_id)
+        const qtyBase = Number(line.qty_base) / yieldQty
+        const inputQty = line.input_qty === null ? null : Number(line.input_qty) / yieldQty
+
         if (!group) {
           addGap({
             type: 'ingredient',
@@ -209,31 +330,66 @@ export function simulateProductCosts(input: SimulateCostsInput): SimulatedProduc
             groupId: line.inventory_group_id,
             tier: drinkTier,
           })
+          tierLines.push({
+            groupId: line.inventory_group_id,
+            groupName: 'Grupo no encontrado',
+            itemName: null,
+            itemCount: 0,
+            purchaseUnit: null,
+            purchaseFactor: null,
+            packagePrice: null,
+            unitCost: null,
+            qtyBase,
+            inputQty,
+            inputUnit: line.input_unit,
+            baseUnit: 'ml',
+            lineCost: null,
+            missing: true,
+          })
           complete = false
           continue
         }
 
         const activeItems = itemsByGroup.get(group.group_id) ?? []
-        const singleItemDraft =
-          activeItems.length === 1 ? input.drafts[activeItems[0]!.id] : undefined
-        const unitCost = groupUnitCost(group, line.tier_rule, drinkTier, singleItemDraft)
+        const draft = activeItems.length === 1 ? input.drafts[activeItems[0]!.id] : undefined
+        const pricing = resolveGroupPricing(group, line.tier_rule, drinkTier, activeItems, draft)
 
-        if (unitCost === null) {
+        if (pricing.unitCost === null) {
           const gap = gapLabel(group, activeItems, line.tier_rule, drinkTier)
           addGap({ ...gap, groupId: group.group_id, tier: drinkTier })
           complete = false
-          continue
         }
 
-        batchCost += Number(line.qty_base) * unitCost
+        tierLines.push({
+          groupId: group.group_id,
+          groupName: group.name,
+          itemName: pricing.itemName,
+          itemCount: pricing.itemCount,
+          purchaseUnit: pricing.purchaseUnit,
+          purchaseFactor: pricing.purchaseFactor,
+          packagePrice: pricing.packagePrice,
+          unitCost: pricing.unitCost,
+          qtyBase,
+          inputQty,
+          inputUnit: line.input_unit,
+          baseUnit: group.base_unit,
+          lineCost: pricing.unitCost === null ? null : roundMoney(qtyBase * pricing.unitCost),
+          missing: pricing.unitCost === null,
+        })
+
+        if (pricing.unitCost !== null) {
+          batchCost += Number(line.qty_base) * pricing.unitCost
+        }
       }
 
+      ingredientLines[drinkTier] = tierLines
       if (complete) {
         tierCosts[drinkTier] = roundMoney(batchCost / yieldQty)
       }
     }
 
     let consumablesCost: number | null = 0
+    const consumableLines: SimulatedConsumableLine[] = []
     const applicableDefaults = input.defaults.filter(
       (item) => item.active && item.applies_to_kind === 'preparado',
     )
@@ -256,23 +412,47 @@ export function simulateProductCosts(input: SimulateCostsInput): SimulatedProduc
             label: 'Falta un grupo de consumibles',
             groupId: defaultItem.group_id,
           })
+          consumableLines.push({
+            role: defaultItem.role,
+            groupId: defaultItem.group_id,
+            groupName: 'Grupo no encontrado',
+            qty: null,
+            grams: null,
+            unitCost: null,
+            lineCost: null,
+            missing: true,
+          })
           complete = false
           continue
         }
 
         if (defaultItem.role === 'ice') {
           const iceMl = Math.max(0, product.serving_size_ml - liquidMl)
-          total += iceMl * input.iceDensity * input.icePricePerGram
+          const iceGrams = iceMl * input.iceDensity
+          const iceCost = iceGrams * input.icePricePerGram
+
+          total += iceCost
+          consumableLines.push({
+            role: 'ice',
+            groupId: group.group_id,
+            groupName: group.name,
+            qty: null,
+            grams: iceGrams,
+            unitCost: input.icePricePerGram,
+            lineCost: roundMoney(iceCost),
+            missing: false,
+          })
           continue
         }
 
         const activeItems = itemsByGroup.get(group.group_id) ?? []
-        const singleItemDraft =
-          activeItems.length === 1 ? input.drafts[activeItems[0]!.id] : undefined
+        const draft = activeItems.length === 1 ? input.drafts[activeItems[0]!.id] : undefined
         const unitCost =
-          singleItemDraft !== undefined
-            ? parseDraftCost(singleItemDraft)
+          draft !== undefined
+            ? parseDraftCost(draft)
             : (defaultItem.avg_cost ?? group.reference_cost ?? group.all_avg_cost)
+
+        const qty = defaultItem.qty_base ?? 1
 
         if (unitCost === null) {
           addGap({
@@ -281,11 +461,31 @@ export function simulateProductCosts(input: SimulateCostsInput): SimulatedProduc
             groupId: group.group_id,
             search: group.name,
           })
+          consumableLines.push({
+            role: defaultItem.role,
+            groupId: group.group_id,
+            groupName: group.name,
+            qty,
+            grams: null,
+            unitCost: null,
+            lineCost: null,
+            missing: true,
+          })
           complete = false
           continue
         }
 
-        total += (defaultItem.qty_base ?? 1) * unitCost
+        total += qty * unitCost
+        consumableLines.push({
+          role: defaultItem.role,
+          groupId: group.group_id,
+          groupName: group.name,
+          qty,
+          grams: null,
+          unitCost,
+          lineCost: roundMoney(qty * unitCost),
+          missing: false,
+        })
       }
 
       consumablesCost = complete ? roundMoney(total) : null
@@ -312,6 +512,29 @@ export function simulateProductCosts(input: SimulateCostsInput): SimulatedProduc
         ? 'pending'
         : 'complete'
 
+    const normalDetail: SimulatedTierDetail = {
+      tier: 'normal',
+      ingredientLines: ingredientLines.normal,
+      consumableLines,
+      recipeCost: tierCosts.normal,
+      consumablesCost,
+      totalCost: normalCost,
+      margin: normalMargin,
+    }
+
+    const premiumDetail: SimulatedTierDetail | null =
+      product.premium_price === null
+        ? null
+        : {
+            tier: 'premium',
+            ingredientLines: ingredientLines.premium,
+            consumableLines,
+            recipeCost: tierCosts.premium,
+            consumablesCost,
+            totalCost: premiumCost,
+            margin: premiumMargin,
+          }
+
     return {
       product,
       normalRecipeCost: tierCosts.normal,
@@ -323,6 +546,10 @@ export function simulateProductCosts(input: SimulateCostsInput): SimulatedProduc
       premiumMargin,
       status,
       gaps,
+      details: {
+        normal: normalDetail,
+        premium: premiumDetail,
+      },
     }
   })
 }

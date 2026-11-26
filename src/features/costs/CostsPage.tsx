@@ -15,6 +15,7 @@ import {
   saveInventoryPackagePrices,
 } from '@/features/catalog/queries'
 import type { InventoryItemView, InventoryLatestPurchase } from '@/types/database'
+import { CostsBeverageDetailPanel } from './CostsBeverageDetailPanel'
 import { CostsBeveragesPanel } from './CostsBeveragesPanel'
 import { CostsPricesPanel } from './CostsPricesPanel'
 import {
@@ -277,7 +278,22 @@ export function CostsPage() {
 
   function goToPrices(search: string) {
     setPriceSearch(search)
-    setTab('insumos')
+    const params = new URLSearchParams(searchParams)
+    params.delete('bebida')
+    params.set('tab', 'insumos')
+    setSearchParams(params, { replace: true })
+  }
+
+  function openDetail(productId: string) {
+    const params = new URLSearchParams(searchParams)
+    params.set('bebida', productId)
+    setSearchParams(params)
+  }
+
+  function closeDetail() {
+    const params = new URLSearchParams(searchParams)
+    params.delete('bebida')
+    setSearchParams(params)
   }
 
   function updateDraft(itemId: string, draft: PriceDraft) {
@@ -379,99 +395,120 @@ export function CostsPage() {
     )
   }
 
+  const selectedProductId = searchParams.get('bebida')
+  const selectedResult = selectedProductId
+    ? simulated.find((row) => row.product.id === selectedProductId)
+    : undefined
+
   return (
-    <div className="space-y-4">
-      <section className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-sm text-neutral-400">Catálogo</p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight">Costos</h1>
-          <p className="mt-1 text-sm text-neutral-400">
-            Simulador de día perfecto con hielo a $30.00 / 5 kg.
-          </p>
-        </div>
-        <span className="rounded-full border border-brand-400/30 bg-brand-400/10 px-3 py-1.5 text-xs text-brand-200">
-          {canEdit ? 'Edición admin' : 'Solo lectura'}
-        </span>
-      </section>
+    <>
+      <div className={`space-y-4 ${selectedResult ? 'print:hidden' : ''}`}>
+        <section className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-sm text-neutral-400">Catálogo</p>
+            <h1 className="mt-1 text-2xl font-semibold tracking-tight">Costos</h1>
+            <p className="mt-1 text-sm text-neutral-400">
+              Simulador de día perfecto con hielo a $30.00 / 5 kg.
+            </p>
+          </div>
+          <span className="rounded-full border border-brand-400/30 bg-brand-400/10 px-3 py-1.5 text-xs text-brand-200">
+            {canEdit ? 'Edición admin' : 'Solo lectura'}
+          </span>
+        </section>
 
-      <section className="grid grid-cols-2 gap-2 text-sm">
-        <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-3">
-          <p className="text-[11px] text-neutral-500">Bebidas completas</p>
-          <p className="mt-1 text-xl font-semibold text-green-300">{completeCount}</p>
-        </div>
-        <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-3">
-          <p className="text-[11px] text-neutral-500">Bebidas pendientes</p>
-          <p className="mt-1 text-xl font-semibold text-yellow-300">{pendingCount}</p>
-        </div>
-        <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-3">
-          <p className="text-[11px] text-neutral-500">Sin receta</p>
-          <p className="mt-1 text-xl font-semibold text-amber-300">{noRecipeCount}</p>
-        </div>
-        <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-3">
-          <p className="text-[11px] text-neutral-500">Insumos sin precio</p>
-          <p className="mt-1 text-xl font-semibold text-yellow-300">{missingPriceCount}</p>
-        </div>
-        <div className="col-span-2 rounded-2xl border border-neutral-800 bg-neutral-900 p-3">
-          <p className="text-[11px] text-neutral-500">Precios desactualizados vs última compra</p>
-          <p className="mt-1 text-xl font-semibold text-amber-300">{outdatedCount}</p>
-        </div>
-      </section>
+        <section className="grid grid-cols-2 gap-2 text-sm">
+          <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-3">
+            <p className="text-[11px] text-neutral-500">Bebidas completas</p>
+            <p className="mt-1 text-xl font-semibold text-green-300">{completeCount}</p>
+          </div>
+          <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-3">
+            <p className="text-[11px] text-neutral-500">Bebidas pendientes</p>
+            <p className="mt-1 text-xl font-semibold text-yellow-300">{pendingCount}</p>
+          </div>
+          <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-3">
+            <p className="text-[11px] text-neutral-500">Sin receta</p>
+            <p className="mt-1 text-xl font-semibold text-amber-300">{noRecipeCount}</p>
+          </div>
+          <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-3">
+            <p className="text-[11px] text-neutral-500">Insumos sin precio</p>
+            <p className="mt-1 text-xl font-semibold text-yellow-300">{missingPriceCount}</p>
+          </div>
+          <div className="col-span-2 rounded-2xl border border-neutral-800 bg-neutral-900 p-3">
+            <p className="text-[11px] text-neutral-500">Precios desactualizados vs última compra</p>
+            <p className="mt-1 text-xl font-semibold text-amber-300">{outdatedCount}</p>
+          </div>
+        </section>
 
-      <div className="flex rounded-xl border border-neutral-800 bg-neutral-900 p-1 no-print">
-        <button
-          type="button"
-          onClick={() => setTab('bebidas')}
-          className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition ${
-            tab === 'bebidas' ? 'bg-brand-400/10 text-brand-300' : 'text-neutral-500'
-          }`}
-        >
-          Bebidas ({simulated.length})
-        </button>
-        <button
-          type="button"
-          onClick={() => setTab('insumos')}
-          className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition ${
-            tab === 'insumos' ? 'bg-brand-400/10 text-brand-300' : 'text-neutral-500'
-          }`}
-        >
-          Precios de insumos ({itemsQuery.data?.length ?? 0})
-        </button>
+        <div className="flex rounded-xl border border-neutral-800 bg-neutral-900 p-1 no-print">
+          <button
+            type="button"
+            onClick={() => setTab('bebidas')}
+            className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition ${
+              tab === 'bebidas' ? 'bg-brand-400/10 text-brand-300' : 'text-neutral-500'
+            }`}
+          >
+            Bebidas ({simulated.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab('insumos')}
+            className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition ${
+              tab === 'insumos' ? 'bg-brand-400/10 text-brand-300' : 'text-neutral-500'
+            }`}
+          >
+            Precios de insumos ({itemsQuery.data?.length ?? 0})
+          </button>
+        </div>
+
+        {tab === 'bebidas' ? (
+          <CostsBeveragesPanel
+            results={simulated}
+            categoryNames={categoryNames}
+            canEdit={canEdit}
+            onGoToPrices={goToPrices}
+            onGoToGroup={(groupId) => navigate(`/insumos/grupos/${groupId}`)}
+            onGoToRecipe={(productId) => navigate(`/catalogo/${productId}`)}
+            onOpenDetail={openDetail}
+          />
+        ) : (
+          <CostsPricesPanel
+            items={itemsQuery.data ?? []}
+            groups={groupsQuery.data ?? []}
+            latestPurchases={latestByItem}
+            drafts={drafts}
+            usedGroupIds={usedGroupIds}
+            canEdit={canEdit}
+            search={priceSearch}
+            onSearchChange={setPriceSearch}
+            onDraftChange={updateDraft}
+            onApplyLatest={applyLatest}
+            onApplyAll={applyAllLatest}
+            onSave={() => saveMutation.mutate()}
+            savePending={saveMutation.isPending}
+            changesCount={changes.length}
+            outdatedCount={outdatedCount}
+            fixedIceItemIds={fixedIceItemIds}
+            hasInvalid={hasInvalid}
+            savedMessage={savedMessage}
+            saveError={saveMutation.isError ? saveMutation.error.message : null}
+            filter={priceFilter}
+            onFilterChange={setPriceFilter}
+          />
+        )}
       </div>
 
-      {tab === 'bebidas' ? (
-        <CostsBeveragesPanel
-          results={simulated}
-          categoryNames={categoryNames}
+      {selectedResult ? (
+        <CostsBeverageDetailPanel
+          result={selectedResult}
+          categoryName={
+            categoryNames.get(selectedResult.product.category_id ?? '') ?? 'Sin categoría'
+          }
           canEdit={canEdit}
+          onClose={closeDetail}
           onGoToPrices={goToPrices}
-          onGoToGroup={(groupId) => navigate(`/insumos/grupos/${groupId}`)}
           onGoToRecipe={(productId) => navigate(`/catalogo/${productId}`)}
         />
-      ) : (
-        <CostsPricesPanel
-          items={itemsQuery.data ?? []}
-          groups={groupsQuery.data ?? []}
-          latestPurchases={latestByItem}
-          drafts={drafts}
-          usedGroupIds={usedGroupIds}
-          canEdit={canEdit}
-          search={priceSearch}
-          onSearchChange={setPriceSearch}
-          onDraftChange={updateDraft}
-          onApplyLatest={applyLatest}
-          onApplyAll={applyAllLatest}
-          onSave={() => saveMutation.mutate()}
-          savePending={saveMutation.isPending}
-          changesCount={changes.length}
-          outdatedCount={outdatedCount}
-          fixedIceItemIds={fixedIceItemIds}
-          hasInvalid={hasInvalid}
-          savedMessage={savedMessage}
-          saveError={saveMutation.isError ? saveMutation.error.message : null}
-          filter={priceFilter}
-          onFilterChange={setPriceFilter}
-        />
-      )}
-    </div>
+      ) : null}
+    </>
   )
 }

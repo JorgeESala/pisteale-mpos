@@ -13,6 +13,7 @@ type CostsBeveragesPanelProps = {
   onGoToPrices: (search: string) => void
   onGoToGroup: (groupId: string) => void
   onGoToRecipe: (productId: string) => void
+  onOpenDetail: (productId: string) => void
 }
 
 const statusLabels = {
@@ -40,6 +41,7 @@ export function CostsBeveragesPanel({
   onGoToPrices,
   onGoToGroup,
   onGoToRecipe,
+  onOpenDetail,
 }: CostsBeveragesPanelProps) {
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<CostFilter>('all')
@@ -186,7 +188,17 @@ export function CostsBeveragesPanel({
           return (
             <article
               key={row.product.id}
-              className="space-y-3 rounded-2xl border border-neutral-800 bg-neutral-900 p-4 print:break-inside-avoid"
+              role="button"
+              tabIndex={0}
+              aria-label={`Ver desglose de ${row.product.name}`}
+              onClick={() => onOpenDetail(row.product.id)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault()
+                  onOpenDetail(row.product.id)
+                }
+              }}
+              className="cursor-pointer space-y-3 rounded-2xl border border-neutral-800 bg-neutral-900 p-4 transition hover:border-neutral-600 print:break-inside-avoid"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -239,7 +251,10 @@ export function CostsBeveragesPanel({
                 <div className="no-print">
                   <button
                     type="button"
-                    onClick={() => setExpandedId(expanded ? null : row.product.id)}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      setExpandedId(expanded ? null : row.product.id)
+                    }}
                     className="text-xs text-yellow-300 underline"
                   >
                     {expanded ? 'Ocultar qué falta' : `Ver qué falta (${row.gaps.length})`}
@@ -256,7 +271,10 @@ export function CostsBeveragesPanel({
                           {canEdit ? (
                             <button
                               type="button"
-                              onClick={() => handleGap(gap, row.product.id)}
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                handleGap(gap, row.product.id)
+                              }}
                               className="rounded-lg border border-yellow-500/30 px-2 py-1 text-yellow-200"
                             >
                               {gapActionLabel(gap)}
@@ -268,6 +286,8 @@ export function CostsBeveragesPanel({
                   ) : null}
                 </div>
               ) : null}
+
+              <p className="text-[11px] text-neutral-600 no-print">Toca para ver el desglose</p>
             </article>
           )
         })}
